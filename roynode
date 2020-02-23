@@ -1,5 +1,5 @@
-#! /g/ssli/sw/roylu/bin/python3
 import argparse
+#! /g/ssli/sw/roylu/bin/python3
 import csv
 import json
 import subprocess
@@ -194,7 +194,7 @@ if __name__ == '__main__':
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        '-a', dest='show_all_machines', action='store_true',
+        '-a', '--all_machines', dest='show_all_machines', action='store_true',
         help='Show all machines (CPU and GPU).'
     )
     parser.add_argument(
