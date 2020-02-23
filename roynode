@@ -1,0 +1,207 @@
+#! /g/ssli/sw/roylu/bin/python3
+import argparse
+import csv
+import json
+import subprocess
+from terminaltables import AsciiTable
+from termcolor import colored
+
+from io import StringIO
+
+from utils import *
+
+
+def run_cmd(args):
+    try:
+        out = subprocess.Popen(args,
+                               stdout=subprocess.PIPE, 
+                               stderr=subprocess.PIPE)
+    except Exception as e:
+        print('[Error]', e)
+        exit(1)
+    stdout, stderr = out.communicate()
+    return stdout.decode("utf-8")
+
+
+def get_alloc_info(): 
+    stdout = run_cmd(['condor_q', '-run', '-all', '-long', '-json'])
+    hosts = {}
+    if stdout:
+        jobs = json.loads(stdout)
+        for job in jobs:
+            hostname = job['RemoteHost'].split('@')[1].split('.')[0]
+            if hostname not in hosts:
+                hosts[hostname] = host = {'cpu_alloc': 0,
+                                          'ram_alloc': 0,
+                                          'gpu_used': 0,
+                                          'users': []}
+            else:
+                host = hosts[hostname]
+            host['cpu_alloc'] += int(job['RequestCpus'])
+            mem_alloc = job['RequestMemory']
+            if isinstance(mem_alloc, int):
+                host['ram_alloc'] += int(mem_alloc)
+            elif 'ImageSize' in job:
+                image_size = job['ImageSize']
+                host['ram_alloc'] += (image_size + 1) / 1024
+
+            if 'Requestgpus' in job:
+                host['gpu_used'] += int(job['Requestgpus'])
+
+            host['users'].append(job['User'].split('@')[0])
+    return hosts
+
+
+def get_gpu_info(hostname):
+    stdout = run_cmd(['ssh', hostname, 'nvidia-smi --query-gpu=name,memory.total,memory.used,utilization.gpu,temperature.gpu --format=csv'])
+    try:
+        rows = list(csv.DictReader(StringIO(stdout), delimiter=',', skipinitialspace=True))
+        new_rows = []
+        for r in rows:
+            d = {}
+            d['gpu_model'] = r['name'].strip()#.split(' ')[:2])
+            d['gpu_mem_total'] = int(r['memory.total [MiB]'].split(' ')[0])
+            d['gpu_mem_util'] = int(r['memory.used [MiB]'].split(' ')[0])
+            d['gpu_util'] = int(r['utilization.gpu [%]'].split(' ')[0])
+            d['gpu_temp'] = int(r['temperature.gpu'])
+            new_rows.append(d)
+        return new_rows
+    except Exception as e:
+        print('[Error]', e)
+        return {}
+
+    
+def clean_duplicate_nodes(nodes):
+    new_nodes = []
+    existing_node = set()
+    for node in nodes:
+        name = node['Machine']
+        if name not in existing_node: 
+            existing_node.add(name)
+            new_nodes.append(node)
+    return new_nodes
+        
+def list_nodes(show_users=False, show_all_machines=False):
+    stdout = run_cmd(['condor_status', '-long', '-json'])
+    nodes = json.loads(stdout)
+    nodes = clean_duplicate_nodes(nodes)
+    hosts = get_alloc_info()
+
+    titles = ['Node', 'CPU\nUtil/Alloc/Tot', 'RAM (GB)\nUtil/Alloc/Tot',
+              'GPU\n     Name       (°C) Util,  Mem (GB)']
+    if show_users:
+        titles.append('Users')
+
+    rows = []
+    for node in nodes:
+
+        # Do not show cpu machines
+        if not show_all_machines and 'TotalGPUs' not in node:
+            continue
+
+        row = []
+        node_usage = 0.0 # Max usage
+
+        # Hostname
+        hostname = node['Machine'].split('.')[0]
+        host = hosts.get(hostname, {})
+        row.append(hostname)
+    
+        # CPU
+        cpu_total = node['TotalCpus']
+        cpu_alloc = host.get('cpu_alloc', 0)
+        cpu_alloc_ratio = cpu_alloc / cpu_total
+        node_usage = max(node_usage, min(0.8, cpu_alloc_ratio))
+        cpu_string = '{0} / {1:2}'.format(colored_by_ratio('{0:2}'.format(cpu_alloc), cpu_alloc_ratio), cpu_total)
+        row.append(cpu_string)
+
+        # RAM
+        ram_total = node['TotalMemory'] / 1024
+        ram_alloc = host.get('ram_alloc', 0) / 1024
+        ram_alloc_ratio = ram_alloc / ram_total
+        node_usage = max(node_usage, ram_alloc_ratio)
+        ram_string = '{0} / {1:5.1f}'.format(colored_by_ratio('{0:5.1f}'.format(ram_alloc), ram_alloc_ratio), ram_total)
+        row.append(ram_string)
+
+        # GPU
+        if 'TotalGPUs' in node:
+            gpus = get_gpu_info(hostname)
+            gpu_strs = []
+            gpu_used = host.get('gpu_used', 0)
+            gpu_total = len(gpus)
+            for gpu in gpus:
+                gpu_model = gpu['gpu_model']
+                gpu_mem_util = gpu['gpu_mem_util']
+                gpu_mem_total = gpu['gpu_mem_total'] / 1024
+
+                gpu_temp = gpu['gpu_temp']
+                gpu_util = gpu['gpu_util']
+                gpu_temp_str = '--' if gpu_temp < 0 else f'{gpu_temp:2d}'
+                gpu_temp_str = colored_by_ratio(gpu_temp_str, gpu_temp / 100, [0.5, 0.8])
+
+                gpu_mem_util_str = ' -- ' if gpu_mem_util < 0 else f'{gpu_mem_util:4.1f}'
+                gpu_util_str = ' --' if gpu_util < 0 else f'{gpu_util:3}'
+
+                if gpu_used != 0:
+                    clr = 'red'
+                else:
+                    clr = 'green'
+                
+                if gpu_used > 0:
+                   gpu_str = (
+                       f'{colored(f"{gpu_model:18}", clr)} '
+                       f'({gpu_temp_str}) '
+                       f'{thres_red(gpu_util_str, gpu_util if gpu_util >= 0 else 100, 5)}%, '
+                       f'{thres_red(gpu_mem_util_str, gpu_mem_util if gpu_mem_util >= 0 else 100, 0.1)} / '
+                       f'{gpu_mem_total:4.1f}'
+                   )
+                   gpu_used -= 1
+                else:
+                    gpu_str = (
+                        f'{colored(f"{gpu_model:18}", clr)} '
+                        f'({gpu_temp_str}) '
+                        f'{"":13}'
+                        f'{gpu_mem_total:4.1f}'
+                    )
+                gpu_strs.append(gpu_str)
+
+            gpu_ratio = 0.0 if gpu_total == 0 else host.get('gpu_used', 0) / gpu_total
+            node_usage = max(node_usage, gpu_ratio)
+
+            gpus_string = '\n'.join(gpu_strs)
+            row.append(gpus_string)
+
+            # Users
+            # TODO
+            # Add user occupies which GPU
+            if show_users:
+                user_string = ', '.join(host.get('users', []))
+                row.append(user_string)
+
+            row[0] = colored_by_ratio(row[0], node_usage)
+        rows.append(row)
+
+    table = AsciiTable([titles] + rows)
+    for i in range(len(titles)):
+        table.justify_columns[i] = 'center'
+    table.justify_columns[4] = 'left'  # User list
+    print(table.table)
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        prog='roynode',
+        description='Show stats of cluster nodes.',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        '-a', dest='show_all_machines', action='store_true',
+        help='Show all machines (CPU and GPU).'
+    )
+    parser.add_argument(
+        '-u', '--users', dest='show_users', action='store_true',
+        help='Show users on each node.'
+    )
+
+    args = parser.parse_args()
+
+    list_nodes(show_users=args.show_users, show_all_machines=args.show_all_machines)
