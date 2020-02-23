@@ -131,7 +131,7 @@ def list_nodes(show_users=False, show_all_machines=False):
             gpu_total = len(gpus)
             for gpu in gpus:
                 gpu_model = gpu['gpu_model']
-                gpu_mem_util = gpu['gpu_mem_util']
+                gpu_mem_util = gpu['gpu_mem_util'] / 1024
                 gpu_mem_total = gpu['gpu_mem_total'] / 1024
 
                 gpu_temp = gpu['gpu_temp']
