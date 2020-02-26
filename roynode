@@ -1,5 +1,5 @@
-import argparse
 #! /g/ssli/sw/roylu/bin/python3
+import argparse
 import csv
 import json
 import subprocess
@@ -87,7 +87,8 @@ def list_nodes(show_users=False, show_all_machines=False):
     nodes = clean_duplicate_nodes(nodes)
     hosts = get_alloc_info()
 
-    titles = ['Node', 'CPU\nUtil/Alloc/Tot', 'RAM (GB)\nUtil/Alloc/Tot',
+    #titles = ['Node', 'CPU\nUtil/Alloc/Tot', 'RAM (GB)\nUtil/Alloc/Tot',
+    titles = ['Node', 'CPU\nAlloc/Tot', 'RAM (GB)\nAlloc/Tot',
               'GPU\n     Name       (°C) Util,  Mem (GB)']
     if show_users:
         titles.append('Users')
