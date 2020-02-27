@@ -144,8 +144,7 @@ if __name__ == '__main__':
     # TODO
     parser.add_argument(
         '-r', dest='redirect', type=str, required=True,
-        help='The condor stdout, stderr, log and submit description files will be redirect to the assigned directory; '
-             'otherwise, it will be put in a temporarily directory and will be deleted after the job is done or terminated.'
+        help='The condor stdout, stderr, log and submit description files will be redirect to the assigned directory.'
     )
     parser.add_argument(
         'cmd',
