@@ -1,6 +1,7 @@
+#! /g/ssli/sw/roylu/bin/python3
+
 import argparse
 import csv
-#! /g/ssli/sw/roylu/bin/python3
 import json
 import subprocess
 from terminaltables import AsciiTable

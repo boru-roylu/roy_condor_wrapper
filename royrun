@@ -1,0 +1,239 @@
+#! /g/ssli/sw/roylu/bin/python3
+import tempfile
+import shutil
+import time
+
+import argparse
+import sys
+import os
+import grp
+import re
+import subprocess
+
+import getpass
+
+import config
+from utils import *
+
+from pprint import pprint
+from termcolor import colored
+
+from collections import OrderedDict
+
+from normalize_tial_path import normalize_tial_path
+
+def run_job(args):
+    condor_params = OrderedDict()
+
+    # General setting
+    condor_dir = normalize_tial_path(args.redirect)
+    if not os.path.exists(condor_dir):
+        os.makedirs(condor_dir)
+
+    print('condor stdout, stderr, log files will be put in the directory:', condor_dir)
+
+    # CMD
+    real_cmd = args.cmd
+    #script_path = os.path.join(args.tmpdir, 'run.sh')  
+    script_path = os.path.join(condor_dir, 'run.sh')  
+    with open(script_path, 'w') as f:
+        print('#! /bin/sh', file=f)
+        print(' '.join(real_cmd), file=f)
+
+    condor_params['Executable'] = '/bin/sh'
+    condor_params['Universe'] = 'vanilla'
+    condor_params['copy_to_spool'] = False
+    condor_params['Arguments'] = script_path
+    condor_params['getenv'] = True
+    condor_params['initialdir'] = normalize_tial_path(os.getcwd())
+    condor_params['notification'] = args.email_notification
+    condor_params['notify_user'] = f'{getpass.getuser()}@uw.edu'
+    condor_params['Output'] = os.path.join(condor_dir, 'condor.out.$(Cluster)')
+    condor_params['Error'] = os.path.join(condor_dir, 'condor.err.$(Cluster)')
+    condor_params['Log'] = os.path.join(condor_dir, 'condor.log.$(Cluster)')
+
+    # CPU
+    condor_params['request_cpus'] = args.cpu
+
+    # RAM
+    condor_params['request_memory'] = int(args.mem * 1024)
+
+    # GPU
+    if args.gpu > 0:
+        condor_params['+GPUJob'] = f"\"true\""
+        condor_params['request_gpus'] = args.gpu
+        # TODO assign gpu according gpu_type
+        #if args.gpu_type is None:
+        #    condor_params['request_gpus'] = args.gpu
+        #else:
+        #    srun_params.extend([f'--gpus={args.gpu_type}:{args.gpu}'])
+
+    # Time limit
+    if args.time is not None:
+        condor_params['periodic_remove'] = f'(RemoteWallClockTime - CumulativeSuspensionTime) > {args.time}'
+
+    # Exclude the machine heron
+    if args.include:
+        condor_params['requirements'] = ' || '.join([f'NikolaHost == "{node}"' for node in args.include])
+
+    #submit_path = os.path.join(args.tmpdir, 'submit_description_file')
+    submit_path = os.path.join(condor_dir, 'submit_description_file')
+    with open(submit_path, 'w') as f:
+        for k, v in condor_params.items():
+            print(f'{k:20}= {v}', file=f)
+        print('Queue', file=f)
+    
+    proc = subprocess.run(['condor_submit', submit_path])
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+        prog='hrun',
+        description='Run computing jobs.',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        '-t', dest='time', type=str, default="1-0",
+        help='Time limit for the job (days-hours), default is 1 day'
+    )
+    parser.add_argument(
+        '-c', dest='cpu', type=int, default=4,
+        help='Number of CPU cores to request.'
+    )
+    parser.add_argument(
+        '-m', dest='mem', type=float, default=config.mem_min,
+        help=('Size of RAM (in GB) to request. If not specified, the memory size will be '
+              'automatically decided according to free memory size of available nodes.')
+    )
+    parser.add_argument(
+        '-G', dest='gpu', action='count',
+        help=('Request a GPU. Set multiple times (ex: -GG) to request multiple GPUs. '
+              'If this option is not set but gpu_type (-g) is set, 1 GPU will be requested.'
+              )
+    )
+    # TODO
+    #parser.add_argument(
+    #    '-g', dest='gpu_type', default=None, choices=config.gpu_models,
+    #    help=(f'Type of GPU to request. If not set, any type of GPU may be allocated. '
+    #          f'Valid types: {",".join(config.gpu_models)}.'
+    #          )
+    #)
+    parser.add_argument(
+        '-N', '--nodes', dest='nodes', default=None,
+        help=f'Restrict the request to a specific set of nodes. This should be a comma-separated list of node names. '
+             f'It is NOT guaranteed all listed machines are available. For availability, please refer to the command {colored("roynode", "red")}. '
+             f'Machines: {", ".join([colored(n, "green") for n in get_node_names()])} '
+    )
+    parser.add_argument(
+        '-X', '--exclude', dest='exclude', default=None,
+        help='Restrict the request not to use a specific set of nodes. This should be a comma-separated list of node names.'
+    )
+    # TODO
+    #parser.add_argument(
+    #    '-n', dest='job_name', default=None,
+    #    help=('The job name which will be shown in the job list (hjob). '
+    #          'Will be set to the full command (ex: python train.py -lr 0.01) if not specified.')
+    #)
+    parser.add_argument(
+        '-e', dest='email_notification', default='Error', choices=['Error', 'Complete'],
+        help=('Owners of jobs are notified by e-mail when certain events occur. '
+              'If defined by Complete (the default), the owner will be notified '
+              'when the job terminates. If defined by Error, the owner will only '
+              'be notified if the job terminates abnormally, or if the job is placed '
+              'on hold because of a failure, and not by user request.')
+    )
+    # TODO
+    parser.add_argument(
+        '-r', dest='redirect', type=str, required=True,
+        help='The condor stdout, stderr, log and submit description files will be redirect to the assigned directory; '
+             'otherwise, it will be put in a temporarily directory and will be deleted after the job is done or terminated.'
+    )
+    parser.add_argument(
+        'cmd',
+        help='The command to run.'
+    )
+    parser.add_argument(
+        'args', nargs=argparse.REMAINDER, metavar=''
+    )
+
+    args = parser.parse_args()
+
+    # Merge cmd and args
+    args.cmd = [args.cmd] + args.args
+    del args.args
+
+    # Check CPU and GPU values
+    if not config.cpu_min <= args.cpu <= config.cpu_max:
+        sys.exit(f'Error: Requested number of CPU ({args.cpu}) is out of range '
+                 f'({config.cpu_min}-{config.cpu_max}).')
+    if args.mem is not None and not config.mem_min <= args.mem <= config.mem_max:
+        sys.exit(f'Error: Requested memory size ({args.mem:.2f} GB) is out of range '
+                 f'({config.mem_min}-{config.mem_max}).')
+
+    # Check time 
+    day, hr = map(int, re.split('-+', args.time, maxsplit=1))
+    if day > 10 :
+        sys.exit(f'Error: Requested time limit ({day}) is over time limit (10 days)')
+    if hr >= 24 :
+        sys.exit(f'Error: Illegal hours (0 <= hr < 24)')
+
+    args.time = day * 24 * 3600 + hr * 3600
+
+    # Check GPU number and types
+    if args.gpu is None:
+        args.gpu = 0
+        # TODO
+        #args.gpu = 1 if args.gpu_type is not None else 0
+    if args.gpu > 0:
+        if args.gpu > config.gpu_max:
+            sys.exit(f'Error: Requested number of GPU ({args.gpu}) is out of range '
+                     f'({0}-{config.gpu_max}).')
+
+    # TODO
+    # if args.gpu_type is not None:
+        # avail_types = set(config.gpu_models)
+        # if args.gpu_type  not in avail_types:
+            # sys.exit(f'Error: {gpu} is not a valid GPU type.')
+
+    nodes = get_node_names()
+    exclude = set()
+    # Parse exclude
+    if args.exclude is not None:
+        exclude |= set(args.exclude.split(','))
+
+    # Parse Nodes
+    if args.nodes is not None:
+        for n in args.nodes.split(','):
+            if n not in nodes:
+                sys.exit(f'Error: The node should be one of those: {", ".join(nodes)}')
+        exclude |= (set(nodes) - set(args.nodes.split(',')))
+
+    if exclude:
+        args.include = list(set(nodes) - exclude)
+        for n in args.include:
+            if n in config.gpu_node2gpu_max: 
+                if args.gpu == 0:
+                    sys.exit(f'Error: If you want to use {colored(n, "red")}, you have to turn on the -G flag.')
+                if args.gpu > config.gpu_node2gpu_max[n]:
+                    sys.exit(f'Error: You request {args.gpu} GPUs but {colored(n, "red")} only has {config.gpu_node2gpu_max[n]} GPUs.')
+    elif args.gpu == 0:
+        args.include = list(set(nodes) - set(config.gpu_node2gpu_max.keys()))
+    else:
+        args.include = None
+
+    try:
+        run_job(args)
+    except Exception as e:
+        print(f'[Error] {e}')
+    # TODO
+    #try:
+    #    tmpdir_prefix = '.royrun'
+    #    if not os.path.exists(tmpdir_prefix):
+    #        os.makedirs(tmpdir_prefix)
+    #    args.tmpdir = tempfile.mkdtemp(dir=tmpdir_prefix)
+    #except Exception as e:
+    #    print(f'[Error] {e}')
+    #finally:
+    #    try:
+    #        shutil.rmtree(args.tmpdir)
+    #    except IOError:
+    #        sys.stderr.write(f'Failed to clean up temp dir {args.tmpdir}')
