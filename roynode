@@ -10,6 +10,7 @@ from termcolor import colored
 from io import StringIO
 
 from utils import *
+from config import *
 
 
 def run_cmd(args):
@@ -25,10 +26,13 @@ def run_cmd(args):
 
 
 def get_alloc_info(): 
-    stdout = run_cmd(['condor_q', '-run', '-all', '-long', '-json'])
+    stdout = run_cmd(['condor_q', '-run', '-all', '-long', '-global', '-json'])
     hosts = {}
     if stdout:
-        jobs = json.loads(stdout)
+        try:
+            jobs = json.loads(stdout)
+        except:
+            jobs = []
         for job in jobs:
             hostname = job['RemoteHost'].split('@')[1].split('.')[0]
             if hostname not in hosts:
@@ -90,7 +94,7 @@ def list_nodes(show_users=False, show_all_machines=False):
 
     #titles = ['Node', 'CPU\nUtil/Alloc/Tot', 'RAM (GB)\nUtil/Alloc/Tot',
     titles = ['Node', 'CPU\nAlloc/Total', 'RAM (GB)\nAlloc/Total',
-              'GPU\n     Name       (°C) Util,  Mem (GB)']
+              'GPU\n  Name  (°C) Util,  Mem (GB)']
     if show_users:
         titles.append('Users')
 
@@ -132,7 +136,7 @@ def list_nodes(show_users=False, show_all_machines=False):
             gpu_used = host.get('gpu_used', 0)
             gpu_total = len(gpus)
             for gpu in gpus:
-                gpu_model = gpu['gpu_model']
+                gpu_model = simple_gpu_model[gpu['gpu_model']]
                 gpu_mem_util = gpu['gpu_mem_util'] / 1024
                 gpu_mem_total = gpu['gpu_mem_total'] / 1024
 
@@ -151,7 +155,7 @@ def list_nodes(show_users=False, show_all_machines=False):
                 
                 if gpu_used > 0:
                    gpu_str = (
-                       f'{colored(f"{gpu_model:18}", clr)} '
+                       f'{colored(f"{gpu_model:9}", clr)} '
                        f'({gpu_temp_str}) '
                        f'{thres_red(gpu_util_str, gpu_util if gpu_util >= 0 else 100, 5)}%, '
                        f'{thres_red(gpu_mem_util_str, gpu_mem_util if gpu_mem_util >= 0 else 100, 0.1)} / '
@@ -160,9 +164,9 @@ def list_nodes(show_users=False, show_all_machines=False):
                    gpu_used -= 1
                 else:
                     gpu_str = (
-                        f'{colored(f"{gpu_model:18}", clr)} '
+                        f'{colored(f"{gpu_model:9}", clr)} '
                         f'({gpu_temp_str}) '
-                        f'{"":13}'
+                        f'{"":8}'
                         f'{gpu_mem_total:4.1f}'
                     )
                 gpu_strs.append(gpu_str)
