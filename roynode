@@ -39,7 +39,7 @@ def get_alloc_info():
                 hosts[hostname] = host = {'cpu_alloc': 0,
                                           'ram_alloc': 0,
                                           'gpu_used': 0,
-                                          'users': []}
+                                          'users_and_jobids': []}
             else:
                 host = hosts[hostname]
             host['cpu_alloc'] += int(job['RequestCpus'])
@@ -53,7 +53,12 @@ def get_alloc_info():
             if 'Requestgpus' in job:
                 host['gpu_used'] += int(job['Requestgpus'])
 
-            host['users'].append(job['User'].split('@')[0])
+            user = job['User'].split('@')[0]
+            jobid = job['GlobalJobId'].split('#')[1]
+            host['users_and_jobids'].append((user, jobid))
+
+            #host['users'].append(job['User'].split('@')[0])
+            #host['job_ids'].append(job['GlobalJobId'].split('#')[1])
     return hosts
 
 
@@ -96,7 +101,7 @@ def list_nodes(show_users=False, show_all_machines=False):
     titles = ['Node', 'CPU\nAlloc/Total', 'RAM (GB)\nAlloc/Total',
               'GPU\n  Name  (°C) Util,  Mem (GB)']
     if show_users:
-        titles.append('Users')
+        titles.append('User(Job ID)')
 
     rows = []
     for node in nodes:
@@ -181,8 +186,10 @@ def list_nodes(show_users=False, show_all_machines=False):
             # TODO
             # Add user occupies which GPU
             if show_users:
-                user_string = ', '.join(host.get('users', []))
-                row.append(user_string)
+                if 'users_and_jobids' in host:
+                    user_and_jobid_string = ', '.join([f'{u}({j})' for u, j in host['users_and_jobids']])
+                #user_string = ', '.join(host.get('users', []))
+                    row.append(user_and_jobid_string)
 
             row[0] = colored_by_ratio(row[0], node_usage)
         rows.append(row)
