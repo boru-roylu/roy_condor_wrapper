@@ -8,6 +8,7 @@ from terminaltables import AsciiTable
 from termcolor import colored
 
 from io import StringIO
+from collections import defaultdict
 
 from utils import *
 from config import *
@@ -39,7 +40,7 @@ def get_alloc_info():
                 hosts[hostname] = host = {'cpu_alloc': 0,
                                           'ram_alloc': 0,
                                           'gpu_used': 0,
-                                          'users_and_jobids': []}
+                                          'user2jobid': defaultdict(list)}
             else:
                 host = hosts[hostname]
             host['cpu_alloc'] += int(job['RequestCpus'])
@@ -55,10 +56,7 @@ def get_alloc_info():
 
             user = job['User'].split('@')[0]
             jobid = job['GlobalJobId'].split('#')[1]
-            host['users_and_jobids'].append((user, jobid))
-
-            #host['users'].append(job['User'].split('@')[0])
-            #host['job_ids'].append(job['GlobalJobId'].split('#')[1])
+            host['user2jobid'][user].append(jobid)
     return hosts
 
 
@@ -99,7 +97,7 @@ def list_nodes(show_users=False, show_all_machines=False):
 
     #titles = ['Node', 'CPU\nUtil/Alloc/Tot', 'RAM (GB)\nUtil/Alloc/Tot',
     titles = ['Node', 'CPU\nAlloc/Total', 'RAM (GB)\nAlloc/Total',
-              'GPU\n  Name  (°C) Util,  Mem (GB)']
+              'GPU\n     Name     (°C)    Util,  Mem (GB)']
     if show_users:
         titles.append('User(Job ID)')
 
@@ -160,7 +158,7 @@ def list_nodes(show_users=False, show_all_machines=False):
                 
                 if gpu_used > 0:
                    gpu_str = (
-                       f'{colored(f"{gpu_model:9}", clr)} '
+                       f'{colored(f"{gpu_model:12}", clr)} '
                        f'({gpu_temp_str}) '
                        f'{thres_red(gpu_util_str, gpu_util if gpu_util >= 0 else 100, 5)}%, '
                        f'{thres_red(gpu_mem_util_str, gpu_mem_util if gpu_mem_util >= 0 else 100, 0.1)} / '
@@ -169,9 +167,9 @@ def list_nodes(show_users=False, show_all_machines=False):
                    gpu_used -= 1
                 else:
                     gpu_str = (
-                        f'{colored(f"{gpu_model:9}", clr)} '
+                        f'{colored(f"{gpu_model:12}", clr)} '
                         f'({gpu_temp_str}) '
-                        f'{"":8}'
+                        f'{"":14}'
                         f'{gpu_mem_total:4.1f}'
                     )
                 gpu_strs.append(gpu_str)
@@ -181,17 +179,22 @@ def list_nodes(show_users=False, show_all_machines=False):
 
             gpus_string = '\n'.join(gpu_strs)
             row.append(gpus_string)
+        else:
+            row.append("")
 
-            # Users
-            # TODO
-            # Add user occupies which GPU
-            if show_users:
-                if 'users_and_jobids' in host:
-                    user_and_jobid_string = ', '.join([f'{u}({j})' for u, j in host['users_and_jobids']])
-                #user_string = ', '.join(host.get('users', []))
-                    row.append(user_and_jobid_string)
+        # Users
+        # TODO
+        # Add user occupies which GPU
+        if show_users:
+            if 'user2jobid' in host:
+                user_and_jobid_string = []
+                for user, jobids in host['user2jobid'].items():
+                    jobids_string = ', '.join(jobids)
+                    user_and_jobid_string.append(f'{user}({jobids_string})')
+                user_and_jobid_string = ', '.join(user_and_jobid_string)
+                row.append(user_and_jobid_string)
 
-            row[0] = colored_by_ratio(row[0], node_usage)
+        row[0] = colored_by_ratio(row[0], node_usage)
         rows.append(row)
 
     table = AsciiTable([titles] + rows)
