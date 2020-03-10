@@ -116,11 +116,12 @@ def list_nodes(show_users=False, show_all_machines=False):
         if 'TotalGPUs' in node:
 
             gpu_info_path = os.path.join(gpu_info_dir, hostname)
+            gpu_lock_path = os.path.join(gpu_info_dir, f'{hostname}.lock')
 
             while os.path.exists(gpu_lock_path):
                 pass
 
-            gpu_lock_path = os.path.join(gpu_info_dir, f'{hostname}.lock')
+            gpu_info_lock(hostname)
             with open(gpu_info_path, 'r') as f:
                 gpus = json.load(f)
             gpu_info_unlock(hostname)
