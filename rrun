@@ -124,7 +124,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '-N', '--nodes', dest='nodes', default=None,
         help=f'Restrict the request to a specific set of nodes. This should be a comma-separated list of node names. '
-             f'It is NOT guaranteed all listed machines are available. For availability, please refer to the command {colored("roynode", "red")}. '
+             f'It is NOT guaranteed all listed machines are available. For availability, please refer to the command {colored("rnode", "red")}. '
              f'Machines: {", ".join([colored(n, "green") for n in get_node_names()])} '
     )
     parser.add_argument(
