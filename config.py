@@ -8,3 +8,4 @@ gpu_node2gpu_max = {'julia': 2, 'james': 2, 'fred': 2, 'emeril': 8}
 simple_gpu_model = {'TITAN X (Pascal)': 'TITANX', 
                     'TITAN Xp': 'TITANXp',
                     'GeForce RTX 2080 Ti': '2080Ti'}
+gpu_info_dir = '/g/ssli/sw/roylu/roy_condor_wrapper/.gpu_info/'

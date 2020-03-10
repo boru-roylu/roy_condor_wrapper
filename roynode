@@ -1,13 +1,11 @@
 #! /g/ssli/sw/roylu/bin/python3
 
 import argparse
-import csv
 import json
 import subprocess
 from terminaltables import AsciiTable
 from termcolor import colored
 
-from io import StringIO
 from collections import defaultdict
 
 from utils import *
@@ -59,25 +57,6 @@ def get_alloc_info():
             host['user2jobid'][user].append(jobid)
     return hosts
 
-
-def get_gpu_info(hostname):
-    stdout = run_cmd(['ssh', hostname, 'nvidia-smi --query-gpu=name,memory.total,memory.used,utilization.gpu,temperature.gpu --format=csv'])
-    try:
-        rows = list(csv.DictReader(StringIO(stdout), delimiter=',', skipinitialspace=True))
-        new_rows = []
-        for r in rows:
-            d = {}
-            d['gpu_model'] = r['name'].strip()#.split(' ')[:2])
-            d['gpu_mem_total'] = int(r['memory.total [MiB]'].split(' ')[0])
-            d['gpu_mem_util'] = int(r['memory.used [MiB]'].split(' ')[0])
-            d['gpu_util'] = int(r['utilization.gpu [%]'].split(' ')[0])
-            d['gpu_temp'] = int(r['temperature.gpu'])
-            new_rows.append(d)
-        return new_rows
-    except Exception as e:
-        print('[Error]', e)
-        return {}
-
     
 def clean_duplicate_nodes(nodes):
     new_nodes = []
@@ -88,6 +67,7 @@ def clean_duplicate_nodes(nodes):
             existing_node.add(name)
             new_nodes.append(node)
     return new_nodes
+
         
 def list_nodes(show_users=False, show_all_machines=False):
     stdout = run_cmd(['condor_status', '-long', '-json'])
@@ -134,7 +114,16 @@ def list_nodes(show_users=False, show_all_machines=False):
 
         # GPU
         if 'TotalGPUs' in node:
-            gpus = get_gpu_info(hostname)
+
+            gpu_info_path = os.path.join(gpu_info_dir, hostname)
+
+            while os.path.exists(gpu_lock_path):
+                pass
+            gpu_lock_path = os.path.join(gpu_info_dir, f'{hostname}.lock')
+
+            with open(gpu_info_path, 'r') as f:
+                gpus = json.load(f)
+
             gpu_strs = []
             gpu_used = host.get('gpu_used', 0)
             gpu_total = len(gpus)
@@ -179,6 +168,7 @@ def list_nodes(show_users=False, show_all_machines=False):
 
             gpus_string = '\n'.join(gpu_strs)
             row.append(gpus_string)
+            gpu_info_unlock(hostname)
         else:
             row.append("")
 
@@ -189,9 +179,12 @@ def list_nodes(show_users=False, show_all_machines=False):
             if 'user2jobid' in host:
                 user_and_jobid_string = []
                 for user, jobids in host['user2jobid'].items():
-                    jobids_string = ', '.join(jobids)
-                    user_and_jobid_string.append(f'{user}({jobids_string})')
-                user_and_jobid_string = ', '.join(user_and_jobid_string)
+                    jobid_string = []
+                    for i in range(0, len(jobids), 4):
+                        jobid_string.append(', '.join(jobids[i:i+4]))
+                    jobid_string = '\n'.join(jobid_string)
+                    user_and_jobid_string.append(f'{user}({jobid_string})')
+                user_and_jobid_string = '\n'.join(user_and_jobid_string)
                 row.append(user_and_jobid_string)
 
         row[0] = colored_by_ratio(row[0], node_usage)

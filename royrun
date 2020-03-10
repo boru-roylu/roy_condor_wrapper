@@ -83,7 +83,10 @@ def run_job(args):
             print(f'{k:20}= {v}', file=f)
         print('Queue', file=f)
     
-    proc = subprocess.run(['condor_submit', submit_path])
+    if args.interactive:
+        proc = subprocess.run(['condor_submit', '-interactive', submit_path])
+    else:
+        proc = subprocess.run(['condor_submit', submit_path])
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -141,9 +144,13 @@ if __name__ == '__main__':
               'be notified if the job terminates abnormally, or if the job is placed '
               'on hold because of a failure, and not by user request.')
     )
+    parser.add_argument(
+        '-i', '--interactive', dest='interactive', action='store_true',
+        help='Interactive session.'
+    )
     # TODO
     parser.add_argument(
-        '-r', dest='redirect', type=str, required=True,
+        '-r', dest='redirect', type=str, #required=True,
         help='The condor stdout, stderr, log and submit description files will be redirect to the assigned directory.'
     )
     parser.add_argument(
