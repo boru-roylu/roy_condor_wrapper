@@ -119,10 +119,11 @@ def list_nodes(show_users=False, show_all_machines=False):
 
             while os.path.exists(gpu_lock_path):
                 pass
-            gpu_lock_path = os.path.join(gpu_info_dir, f'{hostname}.lock')
 
+            gpu_lock_path = os.path.join(gpu_info_dir, f'{hostname}.lock')
             with open(gpu_info_path, 'r') as f:
                 gpus = json.load(f)
+            gpu_info_unlock(hostname)
 
             gpu_strs = []
             gpu_used = host.get('gpu_used', 0)
@@ -168,7 +169,6 @@ def list_nodes(show_users=False, show_all_machines=False):
 
             gpus_string = '\n'.join(gpu_strs)
             row.append(gpus_string)
-            gpu_info_unlock(hostname)
         else:
             row.append("")
 
