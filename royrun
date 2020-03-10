@@ -42,7 +42,8 @@ def run_job(args):
 
     condor_params['Executable'] = '/bin/sh'
     condor_params['Universe'] = 'vanilla'
-    condor_params['copy_to_spool'] = False
+    if not args.interactive:
+        condor_params['copy_to_spool'] = False
     condor_params['Arguments'] = script_path
     condor_params['getenv'] = True
     condor_params['initialdir'] = normalize_tial_path(os.getcwd())
