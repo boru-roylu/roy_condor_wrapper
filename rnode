@@ -126,50 +126,54 @@ def list_nodes(show_users=False, show_all_machines=False):
                 gpus = json.load(f)
             gpu_info_unlock(hostname)
 
-            gpu_strs = []
-            gpu_used = host.get('gpu_used', 0)
-            gpu_total = len(gpus)
-            for gpu in gpus:
-                gpu_model = simple_gpu_model[gpu['gpu_model']]
-                gpu_mem_util = gpu['gpu_mem_util'] / 1024
-                gpu_mem_total = gpu['gpu_mem_total'] / 1024
+            if gpus:
+                gpu_strs = []
+                gpu_used = host.get('gpu_used', 0)
+                gpu_total = len(gpus)
+                for gpu in gpus:
+                    gpu_model = simple_gpu_model[gpu['gpu_model']]
+                    gpu_mem_util = gpu['gpu_mem_util'] / 1024
+                    gpu_mem_total = gpu['gpu_mem_total'] / 1024
 
-                gpu_temp = gpu['gpu_temp']
-                gpu_util = gpu['gpu_util']
-                gpu_temp_str = '--' if gpu_temp < 0 else f'{gpu_temp:2d}'
-                gpu_temp_str = colored_by_ratio(gpu_temp_str, gpu_temp / 100, [0.5, 0.8])
+                    gpu_temp = gpu['gpu_temp']
+                    gpu_util = gpu['gpu_util']
+                    print(gpu_util)
+                    gpu_temp_str = '--' if gpu_temp < 0 else f'{gpu_temp:2d}'
+                    gpu_temp_str = colored_by_ratio(gpu_temp_str, gpu_temp / 100, [0.5, 0.8])
 
-                gpu_mem_util_str = ' -- ' if gpu_mem_util < 0 else f'{gpu_mem_util:4.1f}'
-                gpu_util_str = ' --' if gpu_util < 0 else f'{gpu_util:3}'
+                    gpu_mem_util_str = ' -- ' if gpu_mem_util < 0 else f'{gpu_mem_util:4.1f}'
+                    gpu_util_str = ' --' if gpu_util < 0 else f'{gpu_util:3}'
 
-                if gpu_used != 0:
-                    clr = 'red'
-                else:
-                    clr = 'green'
-                
-                if gpu_used > 0:
-                   gpu_str = (
-                       f'{colored(f"{gpu_model:12}", clr)} '
-                       f'({gpu_temp_str}) '
-                       f'{thres_red(gpu_util_str, gpu_util if gpu_util >= 0 else 100, 5)}%, '
-                       f'{thres_red(gpu_mem_util_str, gpu_mem_util if gpu_mem_util >= 0 else 100, 0.1)} / '
-                       f'{gpu_mem_total:4.1f}'
-                   )
-                   gpu_used -= 1
-                else:
-                    gpu_str = (
-                        f'{colored(f"{gpu_model:12}", clr)} '
-                        f'({gpu_temp_str}) '
-                        f'{"":14}'
-                        f'{gpu_mem_total:4.1f}'
-                    )
-                gpu_strs.append(gpu_str)
+                    if gpu_used != 0:
+                        clr = 'red'
+                    else:
+                        clr = 'green'
+                    
+                    if gpu_used > 0:
+                       gpu_str = (
+                           f'{colored(f"{gpu_model:12}", clr)} '
+                           f'({gpu_temp_str}) '
+                           f'{thres_red(gpu_util_str, gpu_util if gpu_util >= 0 else 100, 5)}%, '
+                           f'{thres_red(gpu_mem_util_str, gpu_mem_util if gpu_mem_util >= 0 else 100, 0.1)} / '
+                           f'{gpu_mem_total:4.1f}'
+                       )
+                       gpu_used -= 1
+                    else:
+                        gpu_str = (
+                            f'{colored(f"{gpu_model:12}", clr)} '
+                            f'({gpu_temp_str}) '
+                            f'{"":14}'
+                            f'{gpu_mem_total:4.1f}'
+                        )
+                    gpu_strs.append(gpu_str)
 
-            gpu_ratio = 0.0 if gpu_total == 0 else host.get('gpu_used', 0) / gpu_total
-            node_usage = max(node_usage, gpu_ratio)
+                gpu_ratio = 0.0 if gpu_total == 0 else host.get('gpu_used', 0) / gpu_total
+                node_usage = max(node_usage, gpu_ratio)
 
-            gpus_string = '\n'.join(gpu_strs)
-            row.append(gpus_string)
+                gpus_string = '\n'.join(gpu_strs)
+                row.append(gpus_string)
+            else:
+                row.append("")
         else:
             row.append("")
 

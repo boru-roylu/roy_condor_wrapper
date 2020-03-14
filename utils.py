@@ -42,10 +42,12 @@ def run_cmd(args):
         out = subprocess.Popen(args,
                                stdout=subprocess.PIPE, 
                                stderr=subprocess.PIPE)
+        stdout, stderr = out.communicate(timeout=3)
     except Exception as e:
+        if type(e) == subprocess.TimeoutExpired:
+            return None
         print('[Error]', e)
         exit(1)
-    stdout, stderr = out.communicate()
     return stdout.decode("utf-8")
 
 

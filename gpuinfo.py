@@ -7,6 +7,8 @@ from utils import *
 from config import *
 
 gpus = get_gpu_info()
+if not gpus:
+    gpus = {}
 hostname = os.environ['HOSTNAME'].split('.')[0]
 
 os.makedirs(gpu_info_dir, exist_ok=True)
