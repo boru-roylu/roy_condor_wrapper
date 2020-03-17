@@ -2,10 +2,13 @@
 
 #gpu_info_py=/g/ssli/sw/roylu/roy_condor_wrapper/gpuinfo.py
 
+
 output_dir=/g/ssli/sw/roylu/roy_condor_wrapper/.gpu_info
 hostname=`echo $HOSTNAME | cut -d'.' -f1`
 output_path=$output_dir/$hostname
 gpu_lock_path=$output_dir/${hostname}.lock
+
+trap "rm -rf $gpu_lock_path" EXIT
 
 while true
 do
