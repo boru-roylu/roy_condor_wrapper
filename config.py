@@ -10,3 +10,4 @@ simple_gpu_model = {'TITAN X (Pascal)': 'TITANX',
                     'GeForce RTX 2080 Ti': '2080Ti'}
 gpu_info_dir = '/g/ssli/sw/roylu/roy_condor_wrapper/.gpu_info/'
 gpu_hostnames = {'julia', 'james', 'fred', 'emeril'}
+offline_hostnames = {'emeril'}
