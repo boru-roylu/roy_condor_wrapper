@@ -71,23 +71,28 @@ def get_node_names():
 
 
 def get_gpu_info():
-    stdout = run_cmd(['nvidia-smi', '--query-gpu=name,memory.total,memory.used,utilization.gpu,temperature.gpu', '--format=csv'])
-    hostname = os.environ['HOSTNAME']
+    #stdout = run_cmd(['nvidia-smi', '--query-gpu=name,memory.total,memory.used,utilization.gpu,temperature.gpu', '--format=csv'])
+    #hostname = os.environ['HOSTNAME']
+    #try:
+    #    rows = list(csv.DictReader(StringIO(stdout), delimiter=',', skipinitialspace=True))
+    #    new_rows = []
+    #    for r in rows:
+    #        d = {}
+    #        d['gpu_model'] = r['name'].strip()#.split(' ')[:2])
+    #        d['gpu_mem_total'] = int(r['memory.total [MiB]'].split(' ')[0])
+    #        d['gpu_mem_util'] = int(r['memory.used [MiB]'].split(' ')[0])
+    #        d['gpu_util'] = int(r['utilization.gpu [%]'].split(' ')[0])
+    #        d['gpu_temp'] = int(r['temperature.gpu'])
+    #        new_rows.append(d)
+    #    return new_rows
+    #except Exception as e:
+    #    print('[Error]', e)
+    #    return {}
+    stdout = run_cmd(['gpustat', '--json'])
     try:
-        rows = list(csv.DictReader(StringIO(stdout), delimiter=',', skipinitialspace=True))
-        new_rows = []
-        for r in rows:
-            d = {}
-            d['gpu_model'] = r['name'].strip()#.split(' ')[:2])
-            d['gpu_mem_total'] = int(r['memory.total [MiB]'].split(' ')[0])
-            d['gpu_mem_util'] = int(r['memory.used [MiB]'].split(' ')[0])
-            d['gpu_util'] = int(r['utilization.gpu [%]'].split(' ')[0])
-            d['gpu_temp'] = int(r['temperature.gpu'])
-            new_rows.append(d)
-        return new_rows
-    except Exception as e:
-        print('[Error]', e)
-        return {}
+        gpus = json.loads(stdout)
+    except:
+        gpus = {}
 
 
 def gpu_info_lock(hostname):
@@ -99,3 +104,15 @@ def gpu_info_unlock(hostname):
     gpu_lock_path = os.path.join(gpu_info_dir, f'{hostname}.lock')
     if os.path.exists(gpu_lock_path):
         os.remove(gpu_lock_path)
+
+
+def read_gpu_info(hostname):
+    gpu_info_path = os.path.join(gpu_info_dir, hostname)
+    gpu_lock_path = os.path.join(gpu_info_dir, f'{hostname}.lock')
+    while os.path.exists(gpu_lock_path):
+        pass
+    gpu_info_lock(hostname)
+    with open(gpu_info_path, 'r') as f:
+        gpus = json.load(f)
+    gpu_info_unlock(hostname)
+    return gpus['gpus']

@@ -37,7 +37,7 @@ def get_alloc_info():
             if hostname not in hosts:
                 hosts[hostname] = host = {'cpu_alloc': 0,
                                           'ram_alloc': 0,
-                                          'gpu_used': 0,
+                                          #'gpu_used': 0,
                                           'user2jobid': defaultdict(list)}
             else:
                 host = hosts[hostname]
@@ -49,13 +49,14 @@ def get_alloc_info():
                 image_size = job['ImageSize']
                 host['ram_alloc'] += (image_size + 1) / 1024
 
-            if 'Requestgpus' in job:
-                host['gpu_used'] += int(job['Requestgpus'])
+            # TODO will be updated while james becomes normal
+            #if 'Requestgpus' in job:
+            #    host['gpu_used'] += int(job['Requestgpus'])
 
             user = job['User'].split('@')[0]
             jobid = job['GlobalJobId'].split('#')[1]
             host['user2jobid'][user].append(jobid)
-    return hosts
+    return host
 
     
 def clean_duplicate_nodes(nodes):
@@ -95,23 +96,16 @@ def list_nodes(show_users=False, show_all_machines=False):
         hostname = node['Machine'].split('.')[0]
         host = hosts.get(hostname, {})
 
-        if 'TotalGPUs' in node:
-            gpu_info_path = os.path.join(gpu_info_dir, hostname)
-            gpu_lock_path = os.path.join(gpu_info_dir, f'{hostname}.lock')
-            while os.path.exists(gpu_lock_path):
-                pass
-            gpu_info_lock(hostname)
-            with open(gpu_info_path, 'r') as f:
-                gpus = json.load(f)
-            gpu_info_unlock(hostname)
-        else:
-            gpus = {}
+        gpus = {}
+        if hostname in gpu_hostnames:
+            gpus = read_gpu_info(hostname)
 
-        if gpus:
-            row.append(hostname)
-        else:
+        # gpu doesn't function properly
+        if not gpus and hostname in gpu_hostnames:
             row.append(colored(hostname, 'grey'))
-    
+        else:
+            row.append(hostname)
+
         # CPU
         cpu_total = node['TotalCpus']
         cpu_alloc = host.get('cpu_alloc', 0)
@@ -131,36 +125,33 @@ def list_nodes(show_users=False, show_all_machines=False):
         # GPU
         if gpus:
             gpu_strs = []
-            gpu_used = host.get('gpu_used', 0)
             gpu_total = len(gpus)
+            gpu_used = 0
             for gpu in gpus:
-                gpu_model = simple_gpu_model[gpu['gpu_model']]
-                gpu_mem_util = gpu['gpu_mem_util'] / 1024
-                gpu_mem_total = gpu['gpu_mem_total'] / 1024
+                gpu_model = simple_gpu_model[gpu['name']]
+                gpu_mem_util = gpu['memory.used'] / 1024
+                gpu_mem_total = gpu['memory.total'] / 1024
 
-                gpu_temp = gpu['gpu_temp']
-                gpu_util = gpu['gpu_util']
+                gpu_temp = gpu['temperature.gpu']
+                gpu_util = gpu['utilization.gpu']
                 gpu_temp_str = '--' if gpu_temp < 0 else f'{gpu_temp:2d}'
                 gpu_temp_str = colored_by_ratio(gpu_temp_str, gpu_temp / 100, [0.5, 0.8])
 
                 gpu_mem_util_str = ' -- ' if gpu_mem_util < 0 else f'{gpu_mem_util:4.1f}'
                 gpu_util_str = ' --' if gpu_util < 0 else f'{gpu_util:3}'
 
-                if gpu_used != 0:
+                if gpu['processes'] > 0:
                     clr = 'red'
+                    gpu_str = (
+                        f'{colored(f"{gpu_model:12}", clr)} '
+                        f'({gpu_temp_str}) '
+                        f'{thres_red(gpu_util_str, gpu_util if gpu_util >= 0 else 100, 5)}%, '
+                        f'{thres_red(gpu_mem_util_str, gpu_mem_util if gpu_mem_util >= 0 else 100, 0.1)} / '
+                        f'{gpu_mem_total:4.1f}'
+                    )
+                    gpu_used += 1
                 else:
                     clr = 'green'
-                
-                if gpu_used > 0:
-                   gpu_str = (
-                       f'{colored(f"{gpu_model:12}", clr)} '
-                       f'({gpu_temp_str}) '
-                       f'{thres_red(gpu_util_str, gpu_util if gpu_util >= 0 else 100, 5)}%, '
-                       f'{thres_red(gpu_mem_util_str, gpu_mem_util if gpu_mem_util >= 0 else 100, 0.1)} / '
-                       f'{gpu_mem_total:4.1f}'
-                   )
-                   gpu_used -= 1
-                else:
                     gpu_str = (
                         f'{colored(f"{gpu_model:12}", clr)} '
                         f'({gpu_temp_str}) '
@@ -169,7 +160,7 @@ def list_nodes(show_users=False, show_all_machines=False):
                     )
                 gpu_strs.append(gpu_str)
 
-            gpu_ratio = 0.0 if gpu_total == 0 else host.get('gpu_used', 0) / gpu_total
+            gpu_ratio = 0.0 if gpu_total == 0 else gpu_used / gpu_total
             node_usage = max(node_usage, gpu_ratio)
 
             gpus_string = '\n'.join(gpu_strs)
