@@ -131,6 +131,10 @@ if __name__ == '__main__':
         '-X', '--exclude', dest='exclude', default=None,
         help='Restrict the request not to use a specific set of nodes. This should be a comma-separated list of node names.'
     )
+    parser.add_argument(
+        '-ND', '--no_desktop', dest='no_desktop', action='store_true',
+        help='Restrict the request not to submit the job to desktop machines.'
+    )
     # TODO
     #parser.add_argument(
     #    '-n', dest='job_name', default=None,
@@ -214,8 +218,11 @@ if __name__ == '__main__':
                 sys.exit(f'Error: The node should be one of those: {", ".join(nodes)}')
         exclude |= (set(nodes) - set(args.nodes.split(',')))
 
+    if args.no_desktop:
+        exclude |= (desktop_hostnames | gpu_hostnames)
+
+    args.include = list(set(nodes) - exclude)
     if exclude:
-        args.include = list(set(nodes) - exclude)
         for n in args.include:
             if n in config.gpu_node2gpu_max: 
                 if args.gpu == 0:
