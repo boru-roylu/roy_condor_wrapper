@@ -29,4 +29,5 @@ desktop_hostnames = {
     'conure',
     'cardinal',
 }
-offline_hostnames = {'emeril'}
+#offline_hostnames = {'emeril'}
+offline_hostnames = {}
