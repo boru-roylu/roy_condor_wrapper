@@ -19,6 +19,6 @@ while True:
         gpus = json.loads(stdout)
         with portalocker.Lock(gpu_info_path, 'w', timeout=5) as f:
             json.dump(gpus, f)
-        time.sleep(1)
+        time.sleep(10)
     except Exception as e:
         print('[Error]', e)
