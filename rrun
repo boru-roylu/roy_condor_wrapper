@@ -3,14 +3,17 @@ import tempfile
 import shutil
 import time
 
+import datetime
 import argparse
 import sys
 import os
 import grp
 import re
 import subprocess
+import glob
 
 import getpass
+import tempfile
 
 import config
 from utils import *
@@ -22,97 +25,127 @@ from collections import OrderedDict
 
 from normalize_tial_path import normalize_tial_path
 
+import htcondor
+
 def run_job(args):
     condor_params = OrderedDict()
+    username = getpass.getuser()
+    tmpdir_prefix = normalize_tial_path(f'/homes/{username}/.rrun.')
+    tmpdir = tempfile.TemporaryDirectory(prefix=tmpdir_prefix)
 
-    # General setting
-    condor_dir = normalize_tial_path(args.redirect)
-    if not os.path.exists(condor_dir):
-        os.makedirs(condor_dir)
+    print('stdout, stderr, condor log files will be put in the temporary directory:', tmpdir.name)
 
-    print('condor stdout, stderr, log files will be put in the directory:', condor_dir)
+    pwd = normalize_tial_path(os.getcwd())
+    condor_params = {
+        'Universe': 'vanilla',
+        'getenv': True,
+        'initialdir': pwd,
+        'notification': 'Complete',
+        'notify_user': f'{username}@uw.edu',
+        'should_transfer_files': 'No',
+        'periodic_remove': f'(RemoteWallClockTime - CumulativeSuspensionTime) > {args.time}',
+        'coresize': 0,
+        'request_cpus': args.cpu,
+        'request_memory': int(args.mem * 1024)
 
-    # CMD
-    real_cmd = args.cmd
-    #script_path = os.path.join(args.tmpdir, 'run.sh')  
-    script_path = os.path.join(condor_dir, 'run.sh')  
-    with open(script_path, 'w') as f:
-        print('#! /bin/sh', file=f)
-        print(' '.join(real_cmd), file=f)
+    }
 
-    condor_params['Executable'] = '/bin/sh'
-    condor_params['Universe'] = 'vanilla'
-    if not args.interactive:
-        condor_params['copy_to_spool'] = False
-    condor_params['Arguments'] = script_path
-    condor_params['getenv'] = True
-    condor_params['initialdir'] = normalize_tial_path(os.getcwd())
-    condor_params['notification'] = args.email_notification
-    condor_params['notify_user'] = f'{getpass.getuser()}@uw.edu'
-    condor_params['Output'] = os.path.join(condor_dir, 'condor.out.$(Cluster)')
-    condor_params['Error'] = os.path.join(condor_dir, 'condor.err.$(Cluster)')
-    condor_params['Log'] = os.path.join(condor_dir, 'condor.log.$(Cluster)')
 
-    # CPU
-    condor_params['request_cpus'] = args.cpu
-
-    # RAM
-    condor_params['request_memory'] = int(args.mem * 1024)
+    # Exclude the machine heron
+    if args.include:
+        required_hosts = ' || '.join([f'TARGET.NikolaHost == "{node}"' for node in args.include])
+        condor_params['requirements'] = required_hosts
 
     # GPU
     if args.gpu > 0:
         condor_params['+GPUJob'] = f"\"true\""
         condor_params['request_gpus'] = args.gpu
-        # TODO assign gpu according gpu_type
-        #if args.gpu_type is None:
-        #    condor_params['request_gpus'] = args.gpu
-        #else:
-        #    srun_params.extend([f'--gpus={args.gpu_type}:{args.gpu}'])
 
-    # Time limit
-    if args.time is not None:
-        condor_params['periodic_remove'] = f'(RemoteWallClockTime - CumulativeSuspensionTime) > {args.time}'
-
-    # Exclude the machine heron
-    if args.include:
-        condor_params['requirements'] = ' || '.join([f'NikolaHost == "{node}"' for node in args.include])
-
-    #submit_path = os.path.join(args.tmpdir, 'submit_description_file')
-    submit_path = os.path.join(condor_dir, 'submit_description_file')
-    with open(submit_path, 'w') as f:
-        for k, v in condor_params.items():
-            print(f'{k:20}= {v}', file=f)
-        print('Queue', file=f)
-    
     if args.interactive:
-        proc = subprocess.run(['condor_submit', '-interactive', submit_path])
+        condor_params['nice_user'] = True
+        submit_file_path = create_submit_file(condor_params, tmpdir.name)
+        proc = subprocess.Popen(['condor_submit', '-interactive', submit_file_path])
+        ret = proc.communicate()
     else:
-        proc = subprocess.run(['condor_submit', submit_path])
+
+        if args.nice_user:
+            condor_params['nice_user'] = True
+        cmd, cmd_exists = get_executable_cmd(args.cmd[0])
+        if not cmd_exists:
+            sys.exit(f'[Error] {cmd} doesn\'t exist')
+        arguments = ' '.join(args.cmd[1:])
+
+        condor_params['Executable'] = cmd
+        condor_params['Arguments'] = arguments
+        stdout = os.path.join(tmpdir.name, 'stdout')
+        stderr = os.path.join(tmpdir.name, 'stderr')
+        condor_log  = os.path.join(tmpdir.name, 'condor_log')
+
+        condor_params['Output'] = stdout
+        condor_params['Error'] = stderr
+        condor_params['Log'] = condor_log
+
+        hostname_job = htcondor.Submit(condor_params)
+        schedd = htcondor.Schedd()          # get the Python representation of the scheduler
+        with schedd.transaction() as txn:   # open a transaction, represented by `txn`
+            cluster_id = hostname_job.queue(txn)     # queues one job in the current transaction; returns job's ClusterID
+
+        print(f'Submiting job ({cluster_id}) ...')
+        time_now = datetime.datetime.now()
+        time_delta = datetime.timedelta(days=args.day, hours=args.hr)
+        due = time_now + time_delta
+        print(f'This job will be removed at {due.strftime("%c")}')
+
+        try:
+            proc = subprocess.Popen(['condor_wait', condor_log, str(cluster_id)])
+            ret = proc.communicate()
+            print('Job finished!')
+            print('Removing all temporary files ...')
+            remove_files_in_dir(tmpdir.name)
+        except KeyboardInterrupt:
+            print()
+            proc = subprocess.run(['condor_rm', str(cluster_id)])
+            print('Removing all temporary files ... ')
+            time.sleep(3)
+            remove_files_in_dir(tmpdir.name)
+        except Exception as e:
+            print(f'[Error] {e}')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        prog='hrun',
+        prog='rrun',
         description='Run computing jobs.',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        '-t', dest='time', type=str, default="1-0",
-        help='Time limit for the job (days-hours), default is 1 day'
+        '-t',
+        dest='time',
+        type=str,
+        default="3-0",
+        help='Time limit for the job (days-hours), default is 3 day'
     )
     parser.add_argument(
-        '-c', dest='cpu', type=int, default=4,
+        '-c',
+        dest='cpu',
+        type=int,
+        default=1,
         help='Number of CPU cores to request.'
     )
     parser.add_argument(
-        '-m', dest='mem', type=float, default=config.mem_min,
+        '-m',
+        dest='mem',
+        type=float,
+        default=config.mem_min,
         help=('Size of RAM (in GB) to request. If not specified, the memory size will be '
               'automatically decided according to free memory size of available nodes.')
     )
     parser.add_argument(
-        '-G', dest='gpu', action='count',
-        help=('Request a GPU. Set multiple times (ex: -GG) to request multiple GPUs. '
-              'If this option is not set but gpu_type (-g) is set, 1 GPU will be requested.'
-              )
+        '-G',
+        dest='gpu',
+        action='count',
+        help=('Request a GPU. Set multiple times (ex: -GG) to request '
+              'multiple GPUs.'
+        )
     )
     # TODO
     #parser.add_argument(
@@ -122,17 +155,30 @@ if __name__ == '__main__':
     #          )
     #)
     parser.add_argument(
-        '-N', '--nodes', dest='nodes', default=None,
-        help=f'Restrict the request to a specific set of nodes. This should be a comma-separated list of node names. '
-             f'It is NOT guaranteed all listed machines are available. For availability, please refer to the command {colored("rnode", "red")}. '
-             f'Machines: {", ".join([colored(n, "green") for n in get_node_names()])} '
+        '-N',
+        '--nodes',
+        dest='nodes',
+        default=None,
+        help=(f'Restrict the request to a specific set of nodes. '
+              f'This should be a comma-separated list of node names. '
+              f'It is NOT guaranteed all listed machines are available. '
+              f'For availability, please refer to the command '
+              f'{colored("rnode", "red")}. '
+              f'Machines: {", ".join([colored(n, "green") for n in get_node_names()])}')
     )
     parser.add_argument(
-        '-X', '--exclude', dest='exclude', default=None,
-        help='Restrict the request not to use a specific set of nodes. This should be a comma-separated list of node names.'
+        '-X',
+        '--exclude',
+        dest='exclude',
+        default=None,
+        help=('Restrict the request not to use a specific set of nodes. '
+              'This should be a comma-separated list of node names.')
     )
     parser.add_argument(
-        '-ND', '--no_desktop', dest='no_desktop', action='store_true',
+        '-ND',
+        '--no_desktop',
+        dest='no_desktop',
+        action='store_true',
         help='Restrict the request not to submit the job to desktop machines.'
     )
     # TODO
@@ -141,36 +187,42 @@ if __name__ == '__main__':
     #    help=('The job name which will be shown in the job list (hjob). '
     #          'Will be set to the full command (ex: python train.py -lr 0.01) if not specified.')
     #)
+    #parser.add_argument(
+    #    '-e', dest='email_notification', default='Error', choices=['Error', 'Complete'],
+    #    help=('Owners of jobs are notified by e-mail when certain events occur. '
+    #          'If defined by Complete (the default), the owner will be notified '
+    #          'when the job terminates. If defined by Error, the owner will only '
+    #          'be notified if the job terminates abnormally, or if the job is placed '
+    #          'on hold because of a failure, and not by user request.')
+    #)
     parser.add_argument(
-        '-e', dest='email_notification', default='Error', choices=['Error', 'Complete'],
-        help=('Owners of jobs are notified by e-mail when certain events occur. '
-              'If defined by Complete (the default), the owner will be notified '
-              'when the job terminates. If defined by Error, the owner will only '
-              'be notified if the job terminates abnormally, or if the job is placed '
-              'on hold because of a failure, and not by user request.')
+        '-i', '--interactive',
+        dest='interactive',
+        action='store_true',
+        help=('Create a interactive session for debugging. You will ssh to the '
+              'assigned machine automatically. You will be a nice user if you '
+              'use the interactive mode; people will have higher priority if '
+              'they want to launch a job in the same machine.')
     )
     parser.add_argument(
-        '-i', '--interactive', dest='interactive', action='store_true',
-        help='Interactive session.'
-    )
-    # TODO
-    parser.add_argument(
-        '-r', dest='redirect', type=str, #required=True,
-        help='The condor stdout, stderr, log and submit description files will be redirect to the assigned directory.'
+        '-n',
+        '--nice_user',
+        dest='nice_user',
+        action='store_true',
+        help=('You will be a nice user if you turn on this flag. '
+              'Please use this flag if your job is not very urgent.')
     )
     parser.add_argument(
         'cmd',
-        help='The command to run.'
-    )
-    parser.add_argument(
-        'args', nargs=argparse.REMAINDER, metavar=''
+        nargs=argparse.REMAINDER,
+        metavar='',
+        help='the command to launch your job.'
     )
 
     args = parser.parse_args()
 
-    # Merge cmd and args
-    args.cmd = [args.cmd] + args.args
-    del args.args
+    if args.interactive == False and len(args.cmd) == 0:
+        sys.exit(f'Error: Requires a command.')
 
     # Check CPU and GPU values
     if not config.cpu_min <= args.cpu <= config.cpu_max:
@@ -181,13 +233,13 @@ if __name__ == '__main__':
                  f'({config.mem_min}-{config.mem_max}).')
 
     # Check time 
-    day, hr = map(int, re.split('-+', args.time, maxsplit=1))
-    if day > 10 :
-        sys.exit(f'Error: Requested time limit ({day}) is over time limit (10 days)')
-    if hr >= 24 :
+    args.day, args.hr = map(int, re.split('-+', args.time, maxsplit=1))
+    if args.day > 10 :
+        sys.exit(f'Error: Requested time limit ({args.day}) is over time limit (10 days)')
+    if args.hr >= 24 :
         sys.exit(f'Error: Illegal hours (0 <= hr < 24)')
 
-    args.time = day * 24 * 3600 + hr * 3600
+    args.time = args.day * 24 * 3600 + args.hr * 3600
 
     # Check GPU number and types
     if args.gpu is None:
@@ -234,20 +286,4 @@ if __name__ == '__main__':
     else:
         args.include = None
 
-    try:
-        run_job(args)
-    except Exception as e:
-        print(f'[Error] {e}')
-    # TODO
-    #try:
-    #    tmpdir_prefix = '.royrun'
-    #    if not os.path.exists(tmpdir_prefix):
-    #        os.makedirs(tmpdir_prefix)
-    #    args.tmpdir = tempfile.mkdtemp(dir=tmpdir_prefix)
-    #except Exception as e:
-    #    print(f'[Error] {e}')
-    #finally:
-    #    try:
-    #        shutil.rmtree(args.tmpdir)
-    #    except IOError:
-    #        sys.stderr.write(f'Failed to clean up temp dir {args.tmpdir}')
+    run_job(args)
