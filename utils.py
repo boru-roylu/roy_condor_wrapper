@@ -3,6 +3,7 @@
 import os
 import re
 import csv
+import sys
 import glob
 import json
 import subprocess
@@ -110,3 +111,20 @@ def get_executable_cmd(cmd):
 def remove_files_in_dir(dir_path):
     for path in glob.glob(os.path.join(dir_path, '*')):
         os.remove(path)
+
+
+def get_itemdata_and_arguments(path, arguments):
+    with open(path, 'r') as f:
+        itemdata = json.load(f)
+    print(arguments)
+    for k in itemdata[0].keys():
+        k_in_arg = f'#{k}#'
+        if k_in_arg not in arguments:
+            sys.exit(f'[Error] Please make sure the key \"{k}\" in itemdata '
+                     f'should be in you command and like this format '
+                     f'{k_in_arg}')
+        else:
+            k_index = arguments.index(k_in_arg)
+            arguments[k_index] = f'$({k})'
+    print(arguments)
+    return itemdata, arguments
