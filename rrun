@@ -30,10 +30,16 @@ import htcondor
 def run_job(args):
     condor_params = OrderedDict()
     username = getpass.getuser()
-    tmpdir_prefix = normalize_tial_path(f'/homes/{username}/.rrun.')
-    tmpdir = tempfile.TemporaryDirectory(prefix=tmpdir_prefix)
 
-    print('stdout, stderr, condor log files will be put in the temporary directory:', tmpdir.name)
+    if args.redirect:
+        condor_dir = normalize_tial_path(args.redirect)
+        os.makedirs(condor_dir, exist_ok=args.overwrite)
+    else:
+        tmpdir_prefix = normalize_tial_path(f'/homes/{username}/.rrun.')
+        tmpdir = tempfile.TemporaryDirectory(prefix=tmpdir_prefix)
+        condor_dir = tmpdir.name
+
+    print('stdout, stderr, condor log files will be put in the temporary directory:', condor_dir)
 
     pwd = normalize_tial_path(os.getcwd())
     condor_params = {
@@ -63,7 +69,7 @@ def run_job(args):
 
     if args.interactive:
         condor_params['nice_user'] = True
-        submit_file_path = create_submit_file(condor_params, tmpdir.name)
+        submit_file_path = create_submit_file(condor_params, condor_dir)
         proc = subprocess.Popen(['condor_submit', '-interactive', submit_file_path])
         ret = proc.communicate()
     else:
@@ -73,22 +79,38 @@ def run_job(args):
         cmd, cmd_exists = get_executable_cmd(args.cmd[0])
         if not cmd_exists:
             sys.exit(f'[Error] {cmd} doesn\'t exist')
-        arguments = ' '.join(args.cmd[1:])
+            
+        arguments = args.cmd[1:]
+        if args.itemdata_path:
+            itemdata, arguments = get_itemdata_and_arguments(args.itemdata_path, arguments)
+        print(itemdata)
+        arguments = ' '.join(arguments)
 
         condor_params['Executable'] = cmd
         condor_params['Arguments'] = arguments
-        stdout = os.path.join(tmpdir.name, 'stdout')
-        stderr = os.path.join(tmpdir.name, 'stderr')
-        condor_log  = os.path.join(tmpdir.name, 'condor_log')
+        stdout = os.path.join(condor_dir, 'stdout')
+        stderr = os.path.join(condor_dir, 'stderr')
+        condor_log  = os.path.join(condor_dir, 'condor_log')
 
-        condor_params['Output'] = stdout
-        condor_params['Error'] = stderr
+        if args.itemdata_path:
+            #suffix = '.'.join([f'$({key})' for key in itemdata[0].keys()])
+            condor_params['Output'] = f'{stdout}.$(ProcId)'
+            condor_params['Error'] = f'{stderr}.$(ProcId)'
+        else:
+            condor_params['Output'] = stdout
+            condor_params['Error'] = stderr
         condor_params['Log'] = condor_log
 
-        hostname_job = htcondor.Submit(condor_params)
+        pprint(condor_params)
+
+        submit = htcondor.Submit(condor_params)
         schedd = htcondor.Schedd()          # get the Python representation of the scheduler
         with schedd.transaction() as txn:   # open a transaction, represented by `txn`
-            cluster_id = hostname_job.queue(txn)     # queues one job in the current transaction; returns job's ClusterID
+            if args.itemdata_path:
+                results = submit.queue_with_itemdata(txn, 1, iter(itemdata))     # queues one job in the current transaction; returns job's ClusterID
+                cluster_id = results.cluster()
+            else:
+                cluster_id = submit.queue(txn)     # queues one job in the current transaction; returns job's ClusterID
 
         print(f'Submiting job ({cluster_id}) ...')
         time_now = datetime.datetime.now()
@@ -100,14 +122,17 @@ def run_job(args):
             proc = subprocess.Popen(['condor_wait', condor_log, str(cluster_id)])
             ret = proc.communicate()
             print('Job finished!')
-            print('Removing all temporary files ...')
-            remove_files_in_dir(tmpdir.name)
+            if not args.redirect:
+                print('Removing all temporary files ...')
+                time.sleep(3)
+                remove_files_in_dir(condor_dir)
         except KeyboardInterrupt:
             print()
             proc = subprocess.run(['condor_rm', str(cluster_id)])
-            print('Removing all temporary files ... ')
-            time.sleep(3)
-            remove_files_in_dir(tmpdir.name)
+            if not args.redirect:
+                print('Removing all temporary files ... ')
+                time.sleep(3)
+                remove_files_in_dir(condor_dir)
         except Exception as e:
             print(f'[Error] {e}')
 
@@ -180,6 +205,27 @@ if __name__ == '__main__':
         dest='no_desktop',
         action='store_true',
         help='Restrict the request not to submit the job to desktop machines.'
+    )
+    parser.add_argument(
+        '-r',
+        dest='redirect',
+        type=str,
+        default=None,
+        help=('The stdout, stderr, condor log and submit description files '
+             'will be redirect to the assigned directory.')
+    )
+    parser.add_argument(
+        '--overwrite',
+        dest='overwrite',
+        action='store_true',
+        help='Overwrite redirected directory'
+    )
+    parser.add_argument(
+        '--itemdata_path',
+        dest='itemdata_path',
+        type=str,
+        default=None,
+        help='',
     )
     # TODO
     #parser.add_argument(
