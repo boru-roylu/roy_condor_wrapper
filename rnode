@@ -70,7 +70,7 @@ def clean_duplicate_nodes(nodes):
     return new_nodes
 
         
-def list_nodes(show_users=False, show_all_machines=False):
+def list_nodes(show_users=False, only_show_gpu=False):
     stdout = run_cmd(['condor_status', '-long', '-json'])
     nodes = json.loads(stdout)
     nodes = clean_duplicate_nodes(nodes)
@@ -86,7 +86,7 @@ def list_nodes(show_users=False, show_all_machines=False):
     for node in nodes:
 
         # Do not show cpu machines
-        if not show_all_machines and 'TotalGPUs' not in node:
+        if not only_show_gpu and 'TotalGPUs' not in node:
             continue
 
         row = []
@@ -204,8 +204,8 @@ if __name__ == '__main__':
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        '-a', '--all_machines', dest='show_all_machines', action='store_true',
-        help='Show all machines (CPU and GPU).'
+        '-g', '--gpu', dest='only_show_gpu', action='store_false',
+        help='Only show GPU machines.'
     )
     parser.add_argument(
         '-u', '--users', dest='show_users', action='store_true',
@@ -214,4 +214,4 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    list_nodes(show_users=args.show_users, show_all_machines=args.show_all_machines)
+    list_nodes(show_users=args.show_users, only_show_gpu=args.only_show_gpu)
