@@ -83,7 +83,6 @@ def run_job(args):
         arguments = args.cmd[1:]
         if args.itemdata_path:
             itemdata, arguments = get_itemdata_and_arguments(args.itemdata_path, arguments)
-        print(itemdata)
         arguments = ' '.join(arguments)
 
         condor_params['Executable'] = cmd
@@ -100,8 +99,6 @@ def run_job(args):
             condor_params['Output'] = stdout
             condor_params['Error'] = stderr
         condor_params['Log'] = condor_log
-
-        pprint(condor_params)
 
         submit = htcondor.Submit(condor_params)
         schedd = htcondor.Schedd()          # get the Python representation of the scheduler

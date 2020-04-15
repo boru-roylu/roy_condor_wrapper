@@ -116,7 +116,6 @@ def remove_files_in_dir(dir_path):
 def get_itemdata_and_arguments(path, arguments):
     with open(path, 'r') as f:
         itemdata = json.load(f)
-    print(arguments)
     for k in itemdata[0].keys():
         k_in_arg = f'#{k}#'
         if k_in_arg not in arguments:
@@ -126,5 +125,4 @@ def get_itemdata_and_arguments(path, arguments):
         else:
             k_index = arguments.index(k_in_arg)
             arguments[k_index] = f'$({k})'
-    print(arguments)
     return itemdata, arguments
