@@ -117,7 +117,7 @@ def get_itemdata_and_arguments(path, arguments):
     with open(path, 'r') as f:
         itemdata = json.load(f)
     for k in itemdata[0].keys():
-        k_in_arg = f'#{k}#'
+        k_in_arg = f'@{k}@'
         if k_in_arg not in arguments:
             sys.exit(f'[Error] Please make sure the key \"{k}\" in itemdata '
                      f'should be in you command and like this format '
