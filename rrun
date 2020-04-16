@@ -27,19 +27,13 @@ from normalize_tial_path import normalize_tial_path
 
 import htcondor
 
-def run_job(args):
+global cluster_id
+cluster_id = None
+global username
+username = getpass.getuser()
+
+def run_job(args, condor_dir):
     condor_params = OrderedDict()
-    username = getpass.getuser()
-
-    if args.redirect:
-        condor_dir = normalize_tial_path(args.redirect)
-        os.makedirs(condor_dir, exist_ok=args.overwrite)
-    else:
-        tmpdir_prefix = normalize_tial_path(f'/homes/{username}/.rrun.')
-        tmpdir = tempfile.TemporaryDirectory(prefix=tmpdir_prefix)
-        condor_dir = tmpdir.name
-
-    print('stdout, stderr, condor log files will be put in the temporary directory:', condor_dir)
 
     pwd = normalize_tial_path(os.getcwd())
     condor_params = {
@@ -73,7 +67,6 @@ def run_job(args):
         proc = subprocess.Popen(['condor_submit', '-interactive', submit_file_path])
         ret = proc.communicate()
     else:
-
         if args.nice_user:
             condor_params['nice_user'] = True
         cmd, cmd_exists = get_executable_cmd(args.cmd[0])
@@ -102,6 +95,8 @@ def run_job(args):
 
         submit = htcondor.Submit(condor_params)
         schedd = htcondor.Schedd()          # get the Python representation of the scheduler
+        #global cluster_id
+        #cluster_id = None
         with schedd.transaction() as txn:   # open a transaction, represented by `txn`
             if args.itemdata_path:
                 results = submit.queue_with_itemdata(txn, 1, iter(itemdata))     # queues one job in the current transaction; returns job's ClusterID
@@ -115,23 +110,8 @@ def run_job(args):
         due = time_now + time_delta
         print(f'This job will be removed at {due.strftime("%c")}')
 
-        try:
-            proc = subprocess.Popen(['condor_wait', condor_log, str(cluster_id)])
-            ret = proc.communicate()
-            print('Job finished!')
-            if not args.redirect:
-                print('Removing all temporary files ...')
-                time.sleep(3)
-                remove_files_in_dir(condor_dir)
-        except KeyboardInterrupt:
-            print()
-            proc = subprocess.run(['condor_rm', str(cluster_id)])
-            if not args.redirect:
-                print('Removing all temporary files ... ')
-                time.sleep(3)
-                remove_files_in_dir(condor_dir)
-        except Exception as e:
-            print(f'[Error] {e}')
+        proc = subprocess.Popen(['condor_wait', condor_log, str(cluster_id)])
+        ret = proc.communicate()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -329,4 +309,37 @@ if __name__ == '__main__':
     else:
         args.include = None
 
-    run_job(args)
+    try:
+        if args.redirect:
+            condor_dir = normalize_tial_path(args.redirect)
+            os.makedirs(condor_dir, exist_ok=args.overwrite)
+            print('stdout, stderr, condor log files will be put in the directory:', condor_dir)
+        else:
+            tmpdir_prefix = normalize_tial_path(f'/homes/{username}/.rrun.')
+            tmpdir = tempfile.TemporaryDirectory(prefix=tmpdir_prefix)
+            condor_dir = tmpdir.name
+            print('stdout, stderr, condor log files will be put in the temporary directory:', condor_dir)
+        run_job(args, condor_dir)
+
+    except Exception as e:
+        print(f'[Error] {e}')
+    except KeyboardInterrupt:
+        print()
+        print('User requested termination, cleaning up')
+        if cluster_id:
+            proc = subprocess.run(['condor_rm', str(cluster_id)])
+        if not args.redirect:
+            print('Removing all temporary files ...')
+            remove_files_in_dir(condor_dir)
+            print('Wait for NFS sync ...')
+            time.sleep(10)
+    else:
+        print('Sucessful! Job finished!')
+        if not args.redirect:
+            print('Removing all temporary files ...')
+            remove_files_in_dir(condor_dir)
+            print('Wait for NFS sync ...')
+            time.sleep(10)
+    finally:
+        if cluster_id:
+            proc = subprocess.run(['condor_rm', str(cluster_id)])
