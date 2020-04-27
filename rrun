@@ -360,6 +360,10 @@ if __name__ == '__main__':
         condor_dir = tmpdir.name
         print('stdout, stderr, condor log files will be put in the temporary directory:', condor_dir)
     run_job(args, condor_dir)
+
+    if not args.redirect:
+        remove_files_in_dir(condor_dir)
+
     print('Sucessful! Job finished!')
 
     #except Exception as e:
