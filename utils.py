@@ -11,7 +11,8 @@ from termcolor import colored
 from pathlib import Path
 import portalocker
 
-from config import *
+import config
+
 from normalize_tial_path import normalize_tial_path
 
 def colored_by_ratio(text, ratio, thres=[0.5, 0.999999]):
@@ -72,7 +73,7 @@ def get_node_names():
 
 
 def read_gpu_info(hostname):
-    gpu_info_path = os.path.join(gpu_info_dir, hostname)
+    gpu_info_path = os.path.join(config.gpu_info_dir, hostname)
     with portalocker.Lock(gpu_info_path, 'r', timeout=5) as f:
         gpus = json.load(f)
     return gpus['gpus']

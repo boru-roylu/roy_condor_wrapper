@@ -297,9 +297,9 @@ if __name__ == '__main__':
 
     # Check time 
     args.day, args.hr = map(int, re.split('-+', args.time, maxsplit=1))
-    if args.day > 10 :
+    if args.day > 10:
         sys.exit(f'Error: Requested time limit ({args.day}) is over time limit (10 days)')
-    if args.hr >= 24 :
+    if args.hr >= 24:
         sys.exit(f'Error: Illegal hours (0 <= hr < 24)')
 
     args.time = args.day * 24 * 3600 + args.hr * 3600
