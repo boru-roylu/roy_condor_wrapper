@@ -10,6 +10,8 @@ import subprocess
 from termcolor import colored
 from pathlib import Path
 import portalocker
+import yaml
+from itertools import product
 
 import config
 
@@ -130,3 +132,45 @@ def get_itemdata_and_arguments(path, arguments):
             k_index = arguments.index(k_in_arg)
             arguments[k_index] = f'$({k})'
     return itemdata, arguments
+
+
+def create_scripts_for_batch_jobs(path):
+    try:
+        with open(path, 'r') as f:
+            y = yaml.load(f, Loader=yaml.FullLoader)
+    except:
+        sys.exit(f'[Error] The file ({path}) is not a yaml file.')
+
+    assert 'commands' in y
+    assert 'params' in y
+
+    for i, ps in enumerate(y['params']):
+        v = ps['values']
+        assert isinstance(v, str) or isinstance(v, list)
+        assert 'values' in ps and 'name' in ps
+        if isinstance(v, str):
+            try:
+                y['params'][i]['values'] = eval(v)
+            except Exception as e:
+                sys.exit(f'[Error] {e}.')
+
+    keys = [ps['name'] for ps in y['params']]
+    params = [ps['values'] for ps in y['params']]
+    jobs = list(product(*params))
+
+    assert len(keys) == len(jobs[0])
+
+    seen = set()
+    for k in keys:
+        if k not in seen:
+            seen.add(k)
+        else:
+            sys.exit(f'[Error] Duplicated parameter\'s name {k} in the yaml file.')
+
+    scripts = []
+    for job in jobs:
+        cmd = '\n'.join(y['commands'])
+        for k, v in zip(keys, job):
+            cmd = cmd.replace(f'$({k})', str(v))
+        scripts.append(cmd)
+    return scripts

@@ -109,37 +109,43 @@ def run_job(args, condor_dir):
     else:
         if args.nice_user:
             condor_params['nice_user'] = True
-        cmd, cmd_exists = get_executable_cmd(args.cmd[0])
-        if not cmd_exists:
-            sys.exit(f'[Error] {cmd} doesn\'t exist')
-            
-        arguments = args.cmd[1:]
-        if args.itemdata_path:
-            itemdata, arguments = get_itemdata_and_arguments(args.itemdata_path, arguments)
-        arguments = ' '.join(arguments)
 
-        condor_params['Executable'] = cmd
-        condor_params['Arguments'] = arguments
         stdout = os.path.join(condor_dir, 'stdout')
         stderr = os.path.join(condor_dir, 'stderr')
         condor_log  = os.path.join(condor_dir, 'condor_log')
 
-        if args.itemdata_path:
-            #suffix = '.'.join([f'$({key})' for key in itemdata[0].keys()])
-            condor_params['Output'] = f'{stdout}.$(ProcId)'
-            condor_params['Error'] = f'{stderr}.$(ProcId)'
-        else:
+        if not args.batch_job:
+            cmd, cmd_exists = get_executable_cmd(args.cmd[0])
+            if not cmd_exists:
+                sys.exit(f'[Error] {cmd} doesn\'t exist')
+            arguments = ' '.join(args.cmd[1:])
+            condor_params['Executable'] = cmd
+            condor_params['Arguments'] = arguments
             condor_params['Output'] = stdout
             condor_params['Error'] = stderr
+        else:
+            scripts = create_scripts_for_batch_jobs(args.cmd[0])
+            script_path = os.path.join(condor_dir, 'script')
+            for i, script in enumerate(scripts):
+                with open(f'{script_path}.{i}', 'w') as f:
+                    print(script, file=f)
+                    print(script)
+            condor_params['Executable'] = '/usr/bin/bash'
+            condor_params['Arguments'] = f'{script_path}.$(Index)'
+            condor_params['Output'] = f'{stdout}.$(ProcId)'
+            condor_params['Error'] = f'{stderr}.$(ProcId)'
         condor_params['Log'] = condor_log
 
         submit = htcondor.Submit(condor_params)
         schedd = htcondor.Schedd()          # get the Python representation of the scheduler
         global cluster_id
         cluster_id = None
+
         with schedd.transaction() as txn:   # open a transaction, represented by `txn`
-            if args.itemdata_path:
-                results = submit.queue_with_itemdata(txn, 1, iter(itemdata))     # queues one job in the current transaction; returns job's ClusterID
+            if args.batch_job:
+                #results = submit.queue_with_itemdata(txn, 1, iter(itemdata))     # queues one job in the current transaction; returns job's ClusterID
+                # itemdata must be a iter object
+                results = submit.queue_with_itemdata(txn, 1, iter([{'Index': str(i)} for i in range(len(scripts))])) # queues one job in the current transaction; returns job's ClusterID
                 cluster_id = results.cluster()
             else:
                 cluster_id = submit.queue(txn)     # queues one job in the current transaction; returns job's ClusterID
@@ -237,13 +243,13 @@ if __name__ == '__main__':
         action='store_true',
         help='Overwrite redirected directory'
     )
-    parser.add_argument(
-        '--itemdata_path',
-        dest='itemdata_path',
-        type=str,
-        default=None,
-        help='',
-    )
+    #parser.add_argument(
+    #    '--itemdata_path',
+    #    dest='itemdata_path',
+    #    type=str,
+    #    default=None,
+    #    help='',
+    #)
     # TODO
     #parser.add_argument(
     #    '-n', dest='job_name', default=None,
@@ -268,6 +274,11 @@ if __name__ == '__main__':
               'they want to launch a job in the same machine.')
     )
     parser.add_argument(
+        '-b', '--batch_job',
+        dest='batch_job',
+        action='store_true',
+    )
+    parser.add_argument(
         '-n',
         '--nice_user',
         dest='nice_user',
@@ -284,8 +295,14 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    if args.interactive == False and len(args.cmd) == 0:
-        sys.exit(f'Error: Requires a command.')
+    if not args.batch_job:
+        if args.interactive == False and len(args.cmd) == 0:
+            sys.exit(f'Error: Requires a command.')
+    else:
+        if len(args.cmd) == 0:
+            sys.exit(f'Error: Requires a single yaml file.')
+        elif len(args.cmd) > 1:
+            sys.exit(f'Error: Requires a single yaml file. Too many files')
 
     # Check CPU and GPU values
     if not config.cpu_min <= args.cpu <= config.cpu_max:

@@ -1,0 +1,17 @@
+commands:
+    - TIME_SEED=`date +%s`
+    - echo $TIME_SEED "--dataset $(dataset) --builder_name $(builder_name) --learning_rate $(learning_rate) --max_num_blocks $(max_num_blocks)"
+    - echo `python --version`
+
+params:
+    - name: dataset
+      values: ['large']
+      
+    - name: builder_name
+      values: ['hamc']
+
+    - name: learning_rate
+      values: [5e-5, 1e-5]
+
+    - name: max_num_blocks
+      values: range(1, 4)
