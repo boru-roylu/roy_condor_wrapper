@@ -129,7 +129,6 @@ def run_job(args, condor_dir):
             for i, script in enumerate(scripts):
                 with open(f'{script_path}.{i}', 'w') as f:
                     print(script, file=f)
-                    print(script)
             condor_params['Executable'] = '/usr/bin/bash'
             condor_params['Arguments'] = f'{script_path}.$(Index)'
             condor_params['Output'] = f'{stdout}.$(ProcId)'

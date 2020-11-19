@@ -171,6 +171,8 @@ def create_scripts_for_batch_jobs(path):
     for job in jobs:
         cmd = '\n'.join(y['commands'])
         for k, v in zip(keys, job):
+            if k not in cmd:
+                sys.exit(f'[Error] no {k} in commands.')
             cmd = cmd.replace(f'$({k})', str(v))
         scripts.append(cmd)
     return scripts

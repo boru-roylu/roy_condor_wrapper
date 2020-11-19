@@ -1,13 +1,18 @@
+# Each single line will be execuated by the order you create
 commands:
     - TIME_SEED=`date +%s`
+    - export MY_PARAMS = 123
     - echo $TIME_SEED
     - echo `python --version`
+    # you can put your arguments in several lines
     - python 123.py
       --dataset $(dataset)
       --builder_name $(builder_name)
       --learning_rate $(learning_rate)
       --max_num_blocks $(max_num_blocks)
 
+# The name of the paramters will replace the $(name) above
+# rrun will create all combinations of the following parameters
 params:
     - name: dataset
       values: ['large']
