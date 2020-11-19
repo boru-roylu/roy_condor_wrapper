@@ -146,14 +146,16 @@ def run_job(args, condor_dir):
                 # itemdata must be a iter object
                 results = submit.queue_with_itemdata(txn, 1, iter([{'Index': str(i)} for i in range(len(scripts))])) # queues one job in the current transaction; returns job's ClusterID
                 cluster_id = results.cluster()
+                num_jobs = len(scripts)
             else:
                 cluster_id = submit.queue(txn)     # queues one job in the current transaction; returns job's ClusterID
+                num_jobs = 1
 
-        print(f'Submiting job ({cluster_id}) ...')
+        print(f'Submiting {num_jobs} job(s). ClusterID = {cluster_id} ...')
         time_now = datetime.datetime.now()
         time_delta = datetime.timedelta(days=args.day, hours=args.hr)
         due = time_now + time_delta
-        print(f'This job will be removed at {due.strftime("%c")}')
+        print(f'This cluster will be removed at {due.strftime("%c")} ({args.day} days and {args.hr} hours from now).')
 
         proc = subprocess.Popen(['condor_wait', condor_log, str(cluster_id)])
         ret = proc.communicate()
