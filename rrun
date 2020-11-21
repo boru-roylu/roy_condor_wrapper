@@ -133,6 +133,7 @@ def run_job(args, condor_dir):
             condor_params['Arguments'] = f'{script_path}.$(Index)'
             condor_params['Output'] = f'{stdout}.$(ProcId)'
             condor_params['Error'] = f'{stderr}.$(ProcId)'
+            condor_params['Environment'] = 'PROCESS_ID=$(ProcId)'
         condor_params['Log'] = condor_log
 
         submit = htcondor.Submit(condor_params)
