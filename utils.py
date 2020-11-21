@@ -175,4 +175,10 @@ def create_scripts_for_batch_jobs(path):
                 sys.exit(f'[Error] no {k} in commands.')
             cmd = cmd.replace(f'$({k})', str(v))
         scripts.append(cmd)
-    return scripts
+
+    if 'job_name' in y:
+        job_name = y['job_name']
+    else:
+        job_name = None
+
+    return scripts, job_name

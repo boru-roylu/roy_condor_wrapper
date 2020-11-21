@@ -124,7 +124,7 @@ def run_job(args, condor_dir):
             condor_params['Output'] = stdout
             condor_params['Error'] = stderr
         else:
-            scripts = create_scripts_for_batch_jobs(args.cmd[0])
+            scripts, job_name = create_scripts_for_batch_jobs(args.cmd[0])
             script_path = os.path.join(condor_dir, 'script')
             for i, script in enumerate(scripts):
                 with open(f'{script_path}.{i}', 'w') as f:
@@ -135,6 +135,11 @@ def run_job(args, condor_dir):
             condor_params['Error'] = f'{stderr}.$(ProcId)'
             condor_params['Environment'] = 'PROCESS_ID=$(ProcId)'
         condor_params['Log'] = condor_log
+
+        if args.job_name:
+            condor_params['JobBatchName'] = args.job_name
+        elif args.batch_job and job_name:
+            condor_params['JobBatchName'] = job_name
 
         submit = htcondor.Submit(condor_params)
         schedd = htcondor.Schedd()          # get the Python representation of the scheduler
@@ -267,7 +272,8 @@ if __name__ == '__main__':
     #          'on hold because of a failure, and not by user request.')
     #)
     parser.add_argument(
-        '-i', '--interactive',
+        '-i',
+        '--interactive',
         dest='interactive',
         action='store_true',
         help=('Create a interactive session for debugging. You will ssh to the '
@@ -276,9 +282,21 @@ if __name__ == '__main__':
               'they want to launch a job in the same machine.')
     )
     parser.add_argument(
-        '-b', '--batch_job',
+        '-b',
+        '--batch_job',
         dest='batch_job',
         action='store_true',
+        help=('Run multiple jobs by a single command.'
+              'Please assign a yaml file that describe the jobs you want to run.'
+              'See the example.yaml for example.')
+    )
+    parser.add_argument(
+        '-j'
+        '--job_name',
+        dest='job_name',
+        type=str,
+        default=None,
+        help='It is intended for use by users to give meaningful names to their jobs'
     )
     parser.add_argument(
         '-n',

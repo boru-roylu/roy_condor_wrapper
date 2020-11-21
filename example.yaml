@@ -1,13 +1,16 @@
+job_name: test
+
 # Each single line will be execuated by the order you create
 commands:
     - TIME_SEED=`date +%s`
-    - export MY_PARAMS = 123
+    - export MY_PARAMS=123
     # You can get the process_id and add time_seed together and set the sum  as 
     # random seed to prevent from port conflict in pytorch distributed data parallel
     - echo $PROCESS_ID
     - echo $TIME_SEED
     - SEED=$((PROCESS_ID + TIME_SEED))
     - echo $SEED
+    - sleep 3;
     - echo `python --version`
     # you can put your arguments in several lines
     - python 123.py
