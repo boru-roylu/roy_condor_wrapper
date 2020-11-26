@@ -61,26 +61,30 @@ def get_alloc_info():
     
 def clean_duplicate_nodes(nodes):
     new_nodes = []
-    existing_node = set()
+    existing_nodes = set()
     for node in nodes:
-        name = node['Machine']
-        if name not in existing_node: 
-            existing_node.add(name)
+        node['Hostname'] = hostname = node['Machine'].split('.')[0]
+        if hostname not in existing_nodes: 
+            existing_nodes.add(hostname)
             new_nodes.append(node)
-    return new_nodes
+    return new_nodes, list(existing_nodes)
 
         
-def list_nodes(show_users=False, only_show_gpu=False):
+def get_nodes():
     stdout = run_cmd(['condor_status', '-long', '-json'])
     nodes = json.loads(stdout)
     nodes = clean_duplicate_nodes(nodes)
+    return nodes
+
+
+def list_nodes(only_show_gpu=False):
+    nodes, _ = get_nodes()
     hosts = get_alloc_info()
 
     #titles = ['Node', 'CPU\nUtil/Alloc/Tot', 'RAM (GB)\nUtil/Alloc/Tot',
     titles = ['Node', 'CPU\nAlloc/Total', 'RAM (GB)\nAlloc/Total',
               'GPU\n     Name     (°C)    Util,  Mem (GB)']
-    if show_users:
-        titles.append('User(Job ID)')
+    titles.append('User(Job ID)')
 
     rows = []
     for node in nodes:
@@ -93,7 +97,7 @@ def list_nodes(show_users=False, only_show_gpu=False):
         node_usage = 0.0 # Max usage
 
         # Hostname
-        hostname = node['Machine'].split('.')[0]
+        hostname = node['Hostname'].split('.')[0]
         host = hosts.get(hostname, {})
 
         if hostname in offline_hostnames:
@@ -176,17 +180,16 @@ def list_nodes(show_users=False, only_show_gpu=False):
         # Users
         # TODO
         # Add user occupies which GPU
-        if show_users:
-            if 'user2jobid' in host:
-                user_and_jobid_string = []
-                for user, jobids in host['user2jobid'].items():
-                    jobid_string = []
-                    for i in range(0, len(jobids), 4):
-                        jobid_string.append(', '.join(jobids[i:i+4]))
-                    jobid_string = '\n'.join(jobid_string)
-                    user_and_jobid_string.append(f'{user}({jobid_string})')
-                user_and_jobid_string = '\n'.join(user_and_jobid_string)
-                row.append(user_and_jobid_string)
+        if 'user2jobid' in host:
+            user_and_jobid_string = []
+            for user, jobids in host['user2jobid'].items():
+                jobid_string = []
+                for i in range(0, len(jobids), 4):
+                    jobid_string.append(', '.join(jobids[i:i+4]))
+                jobid_string = '\n'.join(jobid_string)
+                user_and_jobid_string.append(f'{user}({jobid_string})')
+            user_and_jobid_string = '\n'.join(user_and_jobid_string)
+            row.append(user_and_jobid_string)
 
         row[0] = colored_by_ratio(row[0], node_usage)
         rows.append(row)
@@ -209,9 +212,20 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         '-u', '--users', dest='show_users', action='store_true',
-        help='Show users on each node.'
+        help='[Disable] The default will show users on each node. No need to use the argument anymore.'
+    )
+    parser.add_argument(
+        '-n', '--nodes', dest='nodes', action='store_true',
+        help='Get node names in a single string splited by comma.'
     )
 
     args = parser.parse_args()
 
-    list_nodes(show_users=args.show_users, only_show_gpu=args.only_show_gpu)
+    if not args.nodes:
+        list_nodes(only_show_gpu=args.only_show_gpu)
+        if args.show_users:
+            print(f'{colored("[Update]", "yellow")} '
+                  f'No need to add -u to show user information anymore. '
+                  f'The default will show user information.')
+    else:
+        print(','.join(get_nodes()[1]))
