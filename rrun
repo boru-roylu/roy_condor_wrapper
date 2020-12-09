@@ -177,7 +177,7 @@ if __name__ == '__main__':
         dest='time',
         type=str,
         default="3-0",
-        help='Time limit for the job (days-hours), default is 3 day'
+        help='Time limit for the request (days-hours), default is 3 day. If you use interactive mode, the time limit will be 12 hours to prevent people from forgetting to exit.'
     )
     parser.add_argument(
         '-c',
@@ -340,6 +340,9 @@ if __name__ == '__main__':
         sys.exit(f'Error: Illegal hours (0 <= hr < 24)')
 
     args.time = args.day * 24 * 3600 + args.hr * 3600
+
+    if args.interactive:
+        args.time = 0.5 * 24 * 3600
 
     # Check GPU number and types
     if args.gpu is None:
