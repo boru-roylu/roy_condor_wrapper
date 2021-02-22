@@ -23,6 +23,34 @@ def run_cmd(args):
     stdout, stderr = out.communicate()
     return stdout.decode("utf-8")
 
+def get_job_info():
+    stdout = run_cmd(['condor_status', '-long', '-json'])
+    jobid2info = {}
+    if stdout:
+        try:
+            jobs = json.loads(stdout)
+        except:
+            jobs = []
+        for job in jobs:
+            info = {}
+            if job['Activity'] != "Idle":
+                jobid = job['JobId']
+                info = {
+                    'c': job['Cpus'],
+                    'm': f"{int(job['Memory']) / 1024:.1f}",
+                }
+                gpu = job.get('AssignedGPUs', '').replace('CUDA', '')
+                if gpu:
+                    gpu = sorted([int(g) for g in gpu.split(',')])
+                    if len(gpu) > 1 and (list(range(min(gpu), max(gpu)+1)) == gpu):
+                        gpu = f'{min(gpu)}-{max(gpu)}'
+                    else:
+                        gpu = f'{gpu[0]}'
+                info['g'] = gpu
+
+                jobid2info[jobid] = info
+    return jobid2info
+
 
 def get_alloc_info(): 
     stdout = run_cmd(['condor_q', '-run', '-all', '-long', '-global', '-json'])
@@ -80,6 +108,7 @@ def get_nodes():
 def list_nodes(only_show_gpu=False):
     nodes, _ = get_nodes()
     hosts = get_alloc_info()
+    jobid2info = get_job_info()
 
     #titles = ['Node', 'CPU\nUtil/Alloc/Tot', 'RAM (GB)\nUtil/Alloc/Tot',
     titles = ['Node', 'CPU\nAlloc/Total', 'RAM (GB)\nAlloc/Total',
@@ -184,8 +213,16 @@ def list_nodes(only_show_gpu=False):
             user_and_jobid_string = []
             for user, jobids in host['user2jobid'].items():
                 jobid_string = []
-                for i in range(0, len(jobids), 4):
-                    jobid_string.append(', '.join(jobids[i:i+4]))
+                for jobid in jobids:
+                    info = jobid2info[jobid]
+                    tmp = []
+                    for k, v in info.items():
+                        if v:
+                            tmp.append(f'{k}:{v}')
+                    info_string = f'{jobid}: [' + ';'.join(tmp) + ']'
+                    jobid_string.append(info_string)
+
+                    #jobid_string.append(', '.join(jobids[i:i+2]))
                 jobid_string = '\n'.join(jobid_string)
                 user_and_jobid_string.append(f'{user}({jobid_string})')
             user_and_jobid_string = '\n'.join(user_and_jobid_string)

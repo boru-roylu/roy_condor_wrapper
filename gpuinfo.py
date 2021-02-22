@@ -15,7 +15,6 @@ os.makedirs(gpu_info_dir, exist_ok=True)
 while True:
     for hostname in ['emeril', 'julia', 'james', 'fred']:
         try:
-            print(hostname)
             gpu_info_path = os.path.join(gpu_info_dir, hostname) 
             stdout = run_cmd(['ssh', hostname, '/g/ssli/sw/roylu/bin/gpustat', '--json'])
             gpus = json.loads(stdout)
@@ -23,4 +22,4 @@ while True:
                 json.dump(gpus, f)
         except Exception as e:
             print('[Error]', e)
-    time.sleep(10)
+    time.sleep(5)
