@@ -44,8 +44,10 @@ def get_job_info():
                     gpu = sorted([int(g) for g in gpu.split(',')])
                     if len(gpu) > 1 and (list(range(min(gpu), max(gpu)+1)) == gpu):
                         gpu = f'{min(gpu)}-{max(gpu)}'
-                    else:
+                    elif len(gpu) == 1:
                         gpu = f'{gpu[0]}'
+                    else:
+                        gpu = ','.join(gpu)
                 info['g'] = gpu
 
                 jobid2info[jobid] = info
