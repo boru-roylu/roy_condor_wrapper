@@ -8,17 +8,19 @@ from utils import *
 from config import *
 import portalocker
 
-hostname = os.environ['HOSTNAME'].split('.')[0]
+#hostname = os.environ['HOSTNAME'].split('.')[0]
 
 os.makedirs(gpu_info_dir, exist_ok=True)
-gpu_info_path = os.path.join(gpu_info_dir, hostname) 
 
 while True:
-    try:
-        stdout = run_cmd(['gpustat', '--json'])
-        gpus = json.loads(stdout)
-        with portalocker.Lock(gpu_info_path, 'w', timeout=5) as f:
-            json.dump(gpus, f)
-        time.sleep(50)
-    except Exception as e:
-        print('[Error]', e)
+    for hostname in ['emeril', 'julia', 'james', 'fred']:
+        try:
+            print(hostname)
+            gpu_info_path = os.path.join(gpu_info_dir, hostname) 
+            stdout = run_cmd(['ssh', hostname, '/g/ssli/sw/roylu/bin/gpustat', '--json'])
+            gpus = json.loads(stdout)
+            with portalocker.Lock(gpu_info_path, 'w', timeout=5) as f:
+                json.dump(gpus, f)
+        except Exception as e:
+            print('[Error]', e)
+    time.sleep(10)
