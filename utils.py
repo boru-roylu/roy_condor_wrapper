@@ -75,8 +75,8 @@ def get_node_names():
 def read_gpu_info(hostname):
     gpu_info_path = os.path.join(config.gpu_info_dir, hostname)
     with portalocker.Lock(gpu_info_path, 'r', timeout=5) as f:
-        gpus = json.load(f)
-    return gpus['gpus']
+        gpus = json.load(f)['nvidia_smi_log']['gpu']
+    return gpus
 
 
 def create_run_script(tmpdir, cmd):

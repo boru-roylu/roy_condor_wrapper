@@ -38,17 +38,8 @@ def get_job_info():
                 info = {
                     'c': job['Cpus'],
                     'm': f"{int(job['Memory']) / 1024:.1f}",
+                    'g': job.get('AssignedGPUs', '').replace('CUDA', ''),
                 }
-                gpu = job.get('AssignedGPUs', '').replace('CUDA', '')
-                if gpu:
-                    gpu = sorted([int(g) for g in gpu.split(',')])
-                    if len(gpu) > 1 and (list(range(min(gpu), max(gpu)+1)) == gpu):
-                        gpu = f'{min(gpu)}-{max(gpu)}'
-                    elif len(gpu) == 1:
-                        gpu = f'{gpu[0]}'
-                    else:
-                        gpu = ','.join(gpu)
-                info['g'] = gpu
 
                 jobid2info[jobid] = info
     return jobid2info
@@ -166,38 +157,48 @@ def list_nodes(only_show_gpu=False):
         if gpus:
             gpu_strs = []
             gpu_total = len(gpus)
-            gpu_used = 0
-            for gpu in gpus:
-                gpu_model = simple_gpu_model[gpu['name']]
-                gpu_mem_util = gpu['memory.used'] / 1024
-                gpu_mem_total = gpu['memory.total'] / 1024
 
-                gpu_temp = gpu['temperature.gpu']
-                gpu_util = gpu['utilization.gpu']
+            occupied_gpu_ids = []
+            if 'user2jobid' in host:
+                user_and_jobid_string = []
+                for jobids in host['user2jobid'].values():
+                    for jobid in jobids:
+                        info = jobid2info[jobid]
+                        gpu_ids = info['g'].split(',')
+                        if gpu_ids:
+                            occupied_gpu_ids.extend(gpu_ids)
+            occupied_gpu_ids = [int(g) for g in occupied_gpu_ids]
+            gpu_used = len(occupied_gpu_ids)
+
+            for gpu_i, gpu in enumerate(gpus):
+                gpu_model = simple_gpu_model[gpu['product_name']]
+                gpu_mem_util = int(gpu['fb_memory_usage']['used'].split()[0]) / 1024
+                gpu_mem_total = int(gpu['fb_memory_usage']['total'].split()[0]) / 1024
+
+                gpu_temp = int(gpu['temperature']['gpu_temp'].split()[0])
+                gpu_util = int(gpu['utilization']['gpu_util'].split()[0])
                 gpu_temp_str = '--' if gpu_temp < 0 else f'{gpu_temp:2d}'
                 gpu_temp_str = colored_by_ratio(gpu_temp_str, gpu_temp / 100, [0.5, 0.8])
 
                 gpu_mem_util_str = ' -- ' if gpu_mem_util < 0 else f'{gpu_mem_util:4.1f}'
                 gpu_util_str = ' --' if gpu_util < 0 else f'{gpu_util:3}'
 
-                if len(gpu['processes']) > 0:
-                    clr = 'red'
+                if gpu_i in occupied_gpu_ids:
                     gpu_str = (
-                        f'{colored(f"{gpu_model:12}", clr)} '
+                        f'{colored(f"{gpu_model:12}", "red")}'
                         f'({gpu_temp_str}) '
                         f'{thres_red(gpu_util_str, gpu_util if gpu_util >= 0 else 100, 5)}%, '
                         f'{thres_red(gpu_mem_util_str, gpu_mem_util if gpu_mem_util >= 0 else 100, 0.1)} / '
                         f'{gpu_mem_total:4.1f}'
                     )
-                    gpu_used += 1
                 else:
-                    clr = 'green'
                     gpu_str = (
-                        f'{colored(f"{gpu_model:12}", clr)} '
+                        f'{colored(f"{gpu_model:12}", "green")} '
                         f'({gpu_temp_str}) '
                         f'{"":13}'
                         f'{gpu_mem_total:4.1f}'
                     )
+
                 gpu_strs.append(gpu_str)
 
             gpu_ratio = 0.0 if gpu_total == 0 else gpu_used / gpu_total
@@ -218,9 +219,17 @@ def list_nodes(only_show_gpu=False):
                 for jobid in jobids:
                     info = jobid2info[jobid]
                     tmp = []
-                    for k, v in info.items():
-                        if v:
-                            tmp.append(f'{k}:{v}')
+                    tmp.append(f"c:{info['c']}")
+                    tmp.append(f"m:{info['m']}")
+                    if info['g']:
+                        gpu = sorted([int(g) for g in info['g'].split(',')])
+                        if len(gpu) > 1 and (list(range(min(gpu), max(gpu)+1)) == gpu):
+                            gpu = f'{min(gpu)}-{max(gpu)}'
+                        elif len(gpu) == 1:
+                            gpu = f'{gpu[0]}'
+                        else:
+                            gpu = ','.join(gpu)
+                        tmp.append(f"g:{gpu}")
                     info_string = f'{jobid}: [' + ';'.join(tmp) + ']'
                     jobid_string.append(info_string)
 
