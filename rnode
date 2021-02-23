@@ -1,10 +1,10 @@
 #! /g/ssli/sw/roylu/bin/python3
 
-import argparse
 import json
+import argparse
 import subprocess
-from terminaltables import AsciiTable
 from termcolor import colored
+from terminaltables import AsciiTable
 
 from collections import defaultdict
 

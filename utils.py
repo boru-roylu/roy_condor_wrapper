@@ -1,16 +1,14 @@
 #! /g/ssli/sw/roylu/bin/python3
 
 import os
-import re
-import csv
 import sys
 import glob
+import yaml
 import json
 import subprocess
-from termcolor import colored
-from pathlib import Path
 import portalocker
-import yaml
+
+from termcolor import colored
 from itertools import product
 
 import config
@@ -41,12 +39,12 @@ def uniq(arr):
     return list(dict.fromkeys(arr))
 
 
-def run_cmd(args):
+def run_cmd(args, timeout=3):
     try:
         out = subprocess.Popen(args,
                                stdout=subprocess.PIPE, 
                                stderr=subprocess.PIPE)
-        stdout, stderr = out.communicate(timeout=3)
+        stdout, stderr = out.communicate(timeout=timeout)
     except Exception as e:
         if type(e) == subprocess.TimeoutExpired:
             return None
@@ -112,6 +110,7 @@ def get_executable_cmd(cmd):
 
 
 def remove_files_in_dir(dir_path):
+
     for path in glob.glob(os.path.join(dir_path, '*')):
         os.remove(path)
 
