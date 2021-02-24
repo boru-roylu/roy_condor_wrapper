@@ -41,7 +41,7 @@ def uniq(arr):
 
 def run_cmd(args, timeout=3):
     try:
-        out = subprocess.Popen(args,
+        out = subprocess.Popen(args, shell=True,
                                stdout=subprocess.PIPE, 
                                stderr=subprocess.PIPE)
         stdout, stderr = out.communicate(timeout=timeout)
