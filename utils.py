@@ -65,7 +65,7 @@ def clean_duplicate_nodes(nodes):
 
 
 def get_node_names():
-    stdout = run_cmd(['condor_status', '-long', '-json'])
+    stdout = run_cmd(['condor_status -long -json'])
     nodes = json.loads(stdout)
     nodes = clean_duplicate_nodes(nodes)
     nodes = [node['Machine'].split('.')[0] for node in nodes]
