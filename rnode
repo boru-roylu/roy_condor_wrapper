@@ -28,6 +28,7 @@ def run_cmd(args):
     stdout, stderr = out.communicate()
     return stdout.decode("utf-8")
 
+
 def get_job_info():
     stdout = run_cmd(['condor_status', '-long', '-json'])
     jobid2info = {}

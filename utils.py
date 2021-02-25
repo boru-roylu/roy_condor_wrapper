@@ -110,7 +110,6 @@ def get_executable_cmd(cmd):
 
 
 def remove_files_in_dir(dir_path):
-
     for path in glob.glob(os.path.join(dir_path, '*')):
         os.remove(path)
 
