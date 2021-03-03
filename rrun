@@ -70,14 +70,13 @@ def run_job(args, condor_dir):
         'Universe': 'vanilla',
         'getenv': True,
         'initialdir': pwd,
-        'notification': 'Complete',
-        'notify_user': f'{username}@uw.edu',
+        'notification': 'never',
+        #'notify_user': f'{username}@uw.edu',
         'should_transfer_files': 'No',
         'periodic_remove': f'(RemoteWallClockTime - CumulativeSuspensionTime) > {args.time}',
         'coresize': 0,
         'request_cpus': args.cpu,
-        'request_memory': int(args.mem * 1024)
-
+        'request_memory': int(args.mem * 1024),
     }
 
 
