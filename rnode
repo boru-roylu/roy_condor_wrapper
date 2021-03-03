@@ -236,7 +236,8 @@ def list_nodes(only_show_gpu=False):
                         elif len(gpu) == 1:
                             gpu = f'{gpu[0]}'
                         else:
-                            gpu = ','.join(gpu)
+                            print(gpu)
+                            gpu = ','.join([str(g) for g in gpu])
                         tmp.append(f"g:{gpu}")
                     info_string = f'{jobid}: [' + ';'.join(tmp) + ']'
                     jobid_string.append(info_string)
