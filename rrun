@@ -1,4 +1,4 @@
-#! /g/ssli/sw/roylu/bin/python3
+#! /g/ssli/sw/roylu/bin/python3.7
 import os
 import re
 import sys

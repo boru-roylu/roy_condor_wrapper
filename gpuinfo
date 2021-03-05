@@ -14,9 +14,17 @@ try:
     gpu_info_path = os.path.join(gpu_info_dir, hostname) 
     stdout = run_cmd(['/usr/bin/nvidia-smi -x -q | /g/ssli/sw/roylu/bin/xml2json'], timeout=10)
     gpus = json.loads(stdout)
-    with portalocker.Lock(gpu_info_path, 'w', timeout=1) as f:
-        json.dump(gpus, f)
-        f.flush()
-        os.fsync(f.fileno())
+    f = open(gpu_info_path, 'w')
+    portalocker.lock(f, portalocker.LOCK_EX | portalocker.LOCK_NB)
+    json.dump(gpus, f)
+    f.flush()
+    os.fsync(f.fileno())
+    #with portalocker.Lock(gpu_info_path, 'w', timeout=1) as f:
+    #    json.dump(gpus, f)
+    #    f.flush()
+    #    os.fsync(f.fileno())
 except Exception as e:
     print('[Error]', e)
+
+finally:
+    portalocker.unlock(f)

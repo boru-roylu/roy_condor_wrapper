@@ -1,4 +1,4 @@
-#! /g/ssli/sw/roylu/bin/python3
+#! /g/ssli/sw/roylu/bin/python3.7
 
 import json
 import argparse
@@ -236,7 +236,6 @@ def list_nodes(only_show_gpu=False):
                         elif len(gpu) == 1:
                             gpu = f'{gpu[0]}'
                         else:
-                            print(gpu)
                             gpu = ','.join([str(g) for g in gpu])
                         tmp.append(f"g:{gpu}")
                     info_string = f'{jobid}: [' + ';'.join(tmp) + ']'

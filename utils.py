@@ -74,9 +74,26 @@ def get_node_names():
 
 def read_gpu_info(hostname):
     gpu_info_path = os.path.join(config.gpu_info_dir, hostname)
-    with portalocker.Lock(gpu_info_path, 'r', timeout=5) as f:
+    return {}
+
+    print(gpu_info_path)
+    gpus = {}
+
+    f = open(gpu_info_path, 'r')
+    try:
+        portalocker.lock(f, portalocker.LOCK_EX | portalocker.LOCK_NB)
         gpus = json.load(f)['nvidia_smi_log']['gpu']
+    except portalocker.exceptions.LockException:
+        print('[Error] unable to lock file to gather gpu information.')
+    finally:
+        portalocker.unlock(f)
     return gpus
+
+    #with portalocker.Lock(gpu_info_path, 'r', timeout=5) as f:
+    #with portalocker.Lock(gpu_info_path, 'r') as f:
+    #    print('='*50)
+    #    gpus = json.load(f)['nvidia_smi_log']['gpu']
+    #return gpus
 
 
 def create_run_script(tmpdir, cmd):
