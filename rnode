@@ -225,7 +225,9 @@ def list_nodes(only_show_gpu=False):
             for user, jobids in host['user2jobid'].items():
                 jobid_string = []
                 for jobid in jobids:
-                    info = jobid2info[jobid]
+                    info = jobid2info.get(jobid, {})
+                    if not info:
+                        continue
                     tmp = []
                     tmp.append(f"c:{info['c']}")
                     tmp.append(f"m:{info['m']}")
