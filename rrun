@@ -383,7 +383,7 @@ if __name__ == '__main__':
         os.makedirs(condor_dir, exist_ok=args.overwrite)
         print('stdout, stderr, condor log files will be put in the directory:', condor_dir)
     else:
-        os.makedirs('.rrun', exist_ok=True)
+        os.makedirs(f'/homes/{username}/.rrun', exist_ok=True)
         tmpdir_prefix = normalize_tial_path(f'/homes/{username}/.rrun/')
         tmpdir = tempfile.TemporaryDirectory(prefix=tmpdir_prefix)
         condor_dir = tmpdir.name
