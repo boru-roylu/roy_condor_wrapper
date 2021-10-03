@@ -30,6 +30,8 @@ desktop_hostnames = {
     'dove',
     'conure',
     'cardinal',
+    'crane',
+    'conure',
 }
 #offline_hostnames = {'emeril'}
 offline_hostnames = {}

@@ -107,9 +107,18 @@ def run_job(args, condor_dir):
             cmd, cmd_exists = get_executable_cmd(args.cmd[0])
             if not cmd_exists:
                 sys.exit(f'[Error] {cmd} doesn\'t exist')
-            arguments = ' '.join(args.cmd[1:])
-            condor_params['Executable'] = cmd
-            condor_params['Arguments'] = arguments
+
+            ## this method suddenly doesn't work now 2021/05/26
+            #arguments = ' '.join(args.cmd[1:])
+            #condor_params['Executable'] = cmd
+            #condor_params['Arguments'] = arguments
+
+            cmd_string = ' '.join([cmd] + args.cmd[1:])
+            script_path = os.path.join(condor_dir, 'script')
+            with open(script_path, 'w') as f:
+                print(cmd_string, file=f)
+            condor_params['Executable'] = '/usr/bin/bash'
+            condor_params['Arguments'] = f'{script_path}'
             condor_params['Output'] = stdout
             condor_params['Error'] = stderr
         else:
