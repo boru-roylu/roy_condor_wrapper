@@ -40,12 +40,26 @@ def get_job_info():
         for job in jobs:
             info = {}
             if job['Activity'] != "Idle":
+                assigned_gpus = job.get('AssignedGPUs', '')
                 jobid = job['JobId']
                 info = {
                     'c': job['Cpus'],
                     'm': f"{int(job['Memory']) / 1024:.1f}",
-                    'g': job.get('AssignedGPUs', '').replace('CUDA', ''),
                 }
+                if 'CUDA' in assigned_gpus:
+                    # Condor 8.9.5
+                    assigned_gpus = assigned_gpus.replace('CUDA', '')
+                    info['g'] = assigned_gpus
+                elif assigned_gpus:
+                    # Condor 9.2.0
+                    detected_gpus = job.get('DetectedGPUs', '').replace(' ', '').split(',')
+                    assigned_gpus = assigned_gpus.replace(' ', '').split(',')
+                    g_idxs = []
+                    for ag in assigned_gpus:
+                        g_idxs.append(str(detected_gpus.index(ag)))
+                    info['g'] = ','.join(g_idxs)
+                else:
+                    info['g'] = ''
 
                 jobid2info[jobid] = info
     return jobid2info
@@ -112,7 +126,7 @@ def list_nodes(only_show_gpu=False):
     #titles = ['Node', 'CPU\nUtil/Alloc/Tot', 'RAM (GB)\nUtil/Alloc/Tot',
     titles = ['Node', 'CPU\nAlloc/Total', 'RAM (GB)\nAlloc/Total',
               'GPU\n     Name     (°C)    Util,  Mem (GB)']
-    titles.append('User(Job ID)')
+    titles.append('         Users\n     username(job id)\n  [c:cpu;m:memory;g:gpu]')
 
     rows = []
     for node in nodes:
