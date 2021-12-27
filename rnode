@@ -11,10 +11,10 @@ from collections import defaultdict
 from utils import *
 from config import *
 
-curr_hostname = os.environ['HOSTNAME'].split('.')[0]
-if curr_hostname not in desktop_hostnames:
-    print('[Error]', f'You are on {curr_hostname}. rnode can be only used in your login machine.')
-    exit(1)
+#curr_hostname = os.environ['HOSTNAME'].split('.')[0]
+#if curr_hostname not in desktop_hostnames:
+#    print('[Error]', f'You are on {curr_hostname}. rnode can be only used in your login machine.')
+#    exit(1)
 
 
 def run_cmd(args):
@@ -113,7 +113,11 @@ def clean_duplicate_nodes(nodes):
         
 def get_nodes():
     stdout = run_cmd(['condor_status', '-long', '-json'])
-    nodes = json.loads(stdout)
+    try:
+        nodes = json.loads(stdout)
+    except:
+        print('[Error]', f'Condor ticket expired. Please run kinit again.')
+        exit(1)
     nodes = clean_duplicate_nodes(nodes)
     return nodes
 

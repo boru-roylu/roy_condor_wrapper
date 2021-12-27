@@ -82,7 +82,8 @@ def run_job(args, condor_dir):
 
     # Exclude the machine heron
     if args.include:
-        required_hosts = ' || '.join([f'TARGET.NikolaHost == "{node}"' for node in args.include])
+        #required_hosts = ' || '.join([f'TARGET.NikolaHost == "{node}"' for node in args.include])
+        required_hosts = ' || '.join([f'TARGET.UtsnameNodename == "{node}.ece.uw.edu"' for node in args.include])
         condor_params['requirements'] = required_hosts
 
     # GPU
@@ -129,9 +130,10 @@ def run_job(args, condor_dir):
                     print(script, file=f)
             condor_params['Executable'] = '/usr/bin/bash'
             condor_params['Arguments'] = f'{script_path}.$(Index)'
-            condor_params['Output'] = f'{stdout}.$(ProcId)'
-            condor_params['Error'] = f'{stderr}.$(ProcId)'
+            condor_params['Output'] = f'{stdout}.$(Index)'
+            condor_params['Error'] = f'{stderr}.$(Index)'
             condor_params['Environment'] = 'PROCESS_ID=$(ProcId)'
+            #condor_params['on_exit_remove'] = '(ExitBySignal == False) && (ExitCode == 0)'
         condor_params['Log'] = condor_log
 
         if args.job_name:
@@ -148,7 +150,10 @@ def run_job(args, condor_dir):
             if args.batch_job:
                 #results = submit.queue_with_itemdata(txn, 1, iter(itemdata))     # queues one job in the current transaction; returns job's ClusterID
                 # itemdata must be a iter object
-                results = submit.queue_with_itemdata(txn, 1, iter([{'Index': str(i)} for i in range(len(scripts))])) # queues one job in the current transaction; returns job's ClusterID
+                results = submit.queue_with_itemdata(
+                    txn, 1,
+                    iter([{'Index': str(i)} for i in range(
+                        args.batch_job_start_index, len(scripts))])) # queues one job in the current transaction; returns job's ClusterID
                 cluster_id = results.cluster()
                 num_jobs = len(scripts)
             else:
@@ -159,7 +164,8 @@ def run_job(args, condor_dir):
         time_now = datetime.datetime.now()
         time_delta = datetime.timedelta(days=args.day, hours=args.hr)
         due = time_now + time_delta
-        print(f'This cluster will be removed at {due.strftime("%c")} ({args.day} days and {args.hr} hours from now).')
+        print(f'This cluster will be removed at {due.strftime("%c")} '
+              f'({args.day} days and {args.hr} hours from now).')
 
         proc = subprocess.Popen(['condor_wait', condor_log, str(cluster_id)])
         ret = proc.communicate()
@@ -174,8 +180,10 @@ if __name__ == '__main__':
         '-t',
         dest='time',
         type=str,
-        default="3-0",
-        help='Time limit for the request (days-hours), default is 3 day. If you use interactive mode, the time limit will be 12 hours to prevent people from forgetting to exit.'
+        default="6-0",
+        help='Time limit for the request (days-hours), default is 6 day. '
+             'If you use interactive mode, the time limit will be 1 day to '
+             'prevent people from forgetting to exit.'
     )
     parser.add_argument(
         '-c',
@@ -289,6 +297,14 @@ if __name__ == '__main__':
               'See the example.yaml for example.')
     )
     parser.add_argument(
+        '-s'
+        '--batch_job_start_index',
+        dest='batch_job_start_index',
+        type=int,
+        default=0,
+        help='Batch job start index (for resume failed batch jobs).'
+    )
+    parser.add_argument(
         '-j'
         '--job_name',
         dest='job_name',
@@ -339,8 +355,8 @@ if __name__ == '__main__':
 
     args.time = args.day * 24 * 3600 + args.hr * 3600
 
-    if args.interactive:
-        args.time = 6 * 3600
+    #if args.interactive:
+    #    args.time = 24 * 3600
 
     # Check GPU number and types
     if args.gpu is None:
